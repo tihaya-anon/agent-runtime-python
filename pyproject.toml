@@ -8,10 +8,16 @@ version = "0.1.0"
 description = "Python LangGraph runtime and experiment tooling for Agent Run workers."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "jsonschema>=4.26.0",
+    "langgraph>=1.2.9",
+]
 
 [project.scripts]
 agent-runtime-python-worker = "agent_runtime_python.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+agent_runtime_python = ["schemas/*.json"]

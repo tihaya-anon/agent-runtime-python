@@ -1,16 +1,78 @@
-"""Placeholder Agent Run worker entry point.
-
-The full worker will validate Agent Run worker protocol commands, execute LangGraph runs, and emit
-protocol-compliant NDJSON events. This scaffold keeps the repository installable and testable before
-runtime behavior is implemented.
-"""
+"""Agent Run worker entry point."""
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterable
+from typing import Any, TextIO
 
-def main() -> int:
-    """Run the placeholder worker command."""
+from agent_runtime_python.protocol import (
+    PROTOCOL_VERSION,
+    ProtocolValidationError,
+    encode_event_line,
+    parse_command_line,
+    validation_failure_event,
+)
+from agent_runtime_python.smoke_graph import run_smoke_graph
 
+
+class AgentRunWorker:
+    """Executes one-command-at-a-time Agent Run worker protocol messages."""
+
+    def handle_line(self, line: str) -> list[dict[str, Any]]:
+        try:
+            command = parse_command_line(line)
+        except ProtocolValidationError:
+            return [validation_failure_event()]
+
+        if command["type"] == "run.cancel":
+            return [{"version": PROTOCOL_VERSION, "type": "run.cancelled"}]
+
+        return self._run_agent(command)
+
+    def _run_agent(self, command: dict[str, Any]) -> list[dict[str, Any]]:
+        agent_run_id = command["agentRunId"]
+        message = command["input"]["message"]
+        response = run_smoke_graph(message)
+
+        return [
+            {"version": PROTOCOL_VERSION, "type": "run.started", "agentRunId": agent_run_id},
+            {
+                "version": PROTOCOL_VERSION,
+                "type": "progress.update",
+                "scope": "run",
+                "label": "smoke-graph",
+                "status": "started",
+            },
+            {"version": PROTOCOL_VERSION, "type": "message.delta", "text": response},
+            {
+                "version": PROTOCOL_VERSION,
+                "type": "progress.update",
+                "scope": "run",
+                "label": "smoke-graph",
+                "status": "completed",
+            },
+            {"version": PROTOCOL_VERSION, "type": "run.completed"},
+        ]
+
+
+def run_worker(
+    input_stream: Iterable[str],
+    output_stream: TextIO,
+    worker: AgentRunWorker | None = None,
+) -> None:
+    active_worker = worker or AgentRunWorker()
+
+    for line in input_stream:
+        for event in active_worker.handle_line(line):
+            output_stream.write(encode_event_line(event))
+            output_stream.flush()
+
+
+def main(input_stream: Iterable[str] | None = None, output_stream: TextIO | None = None) -> int:
+    """Run the worker over stdin/stdout NDJSON."""
+
+    run_worker(input_stream or sys.stdin, output_stream or sys.stdout)
     return 0
 
 
