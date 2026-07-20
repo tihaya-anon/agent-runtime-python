@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 agent-runtime-python-worker = "agent_runtime_python.worker:main"
+agent-runtime-python-experiment = "agent_runtime_python.experiment:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
