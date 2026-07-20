@@ -17,7 +17,9 @@ class ProtocolValidationError(ValueError):
 
 
 def _load_schema(schema_file_name: str) -> dict[str, Any]:
-    schema = files("agent_runtime_python.schemas").joinpath(schema_file_name).read_text()
+    schema = (
+        files("agent_runtime_python.schemas").joinpath(schema_file_name).read_text()
+    )
     parsed_schema = json.loads(schema)
     if not isinstance(parsed_schema, dict):
         raise TypeError(f"{schema_file_name} must contain one JSON Schema object")
@@ -38,7 +40,9 @@ def parse_command_line(line: str) -> dict[str, Any]:
 
     record = line.removesuffix("\n").removesuffix("\r")
     if not record or "\n" in record or "\r" in record:
-        raise ProtocolValidationError("Worker command must be one non-empty NDJSON record")
+        raise ProtocolValidationError(
+            "Worker command must be one non-empty NDJSON record"
+        )
 
     try:
         command = json.loads(record)

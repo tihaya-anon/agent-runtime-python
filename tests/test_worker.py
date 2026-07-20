@@ -99,7 +99,9 @@ class WorkerTest(unittest.TestCase):
 
         # Then
         self.assertEqual(attributes[AGENT_RUN_ID_ATTRIBUTE], "ar_python_smoke")
-        self.assertEqual(attributes[RUNTIME_PROFILE_ID_ATTRIBUTE], "runtime-development")
+        self.assertEqual(
+            attributes[RUNTIME_PROFILE_ID_ATTRIBUTE], "runtime-development"
+        )
         self.assertEqual(
             attributes[AGENT_BEHAVIOR_ATTRIBUTES["graph"]],
             "graph:python-smoke",
@@ -110,7 +112,9 @@ class WorkerTest(unittest.TestCase):
         worker = AgentRunWorker()
 
         # When
-        events = worker.handle_line('{"version":1,"type":"run.start","agentRunId":""}\n')
+        events = worker.handle_line(
+            '{"version":1,"type":"run.start","agentRunId":""}\n'
+        )
 
         # Then
         self.assertEqual(

@@ -23,3 +23,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 agent_runtime_python = ["schemas/*.json"]
+
+[tool.black]
+target-version = ["py312"]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.9",
+    "black>=26.5.1",
+]

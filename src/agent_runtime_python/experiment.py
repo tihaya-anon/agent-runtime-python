@@ -77,18 +77,24 @@ class TargetRun:
 
 
 class TrialPlanner(Protocol):
-    def parameter_sets(self, config: ExperimentConfig) -> Sequence[dict[str, JsonScalar]]:
+    def parameter_sets(
+        self, config: ExperimentConfig
+    ) -> Sequence[dict[str, JsonScalar]]:
         """Generate parameter sets for a trial study."""
+        ...
 
 
 class ParameterSweepPlanner:
-    def parameter_sets(self, config: ExperimentConfig) -> Sequence[dict[str, JsonScalar]]:
+    def parameter_sets(
+        self, config: ExperimentConfig
+    ) -> Sequence[dict[str, JsonScalar]]:
         return _parameter_combinations(config.parameter_matrix)
 
 
 class ExperimentTarget(Protocol):
     def run(self, trial: TrialPlan) -> TargetRun:
         """Execute one trial and return Agent Run stream events."""
+        ...
 
 
 class DirectWorkerTarget:
@@ -99,7 +105,9 @@ class DirectWorkerTarget:
         command = json.dumps(trial.command, separators=(",", ":"))
         return TargetRun(
             events=self._worker.handle_line(f"{command}\n"),
-            submitted_runtime_profile_id=str(trial.command["runtimeProfile"]["profileId"]),
+            submitted_runtime_profile_id=str(
+                trial.command["runtimeProfile"]["profileId"]
+            ),
             submitted_behavior_version=dict(trial.command["behaviorVersion"]),
         )
 
@@ -116,7 +124,9 @@ class TsGatewayTarget:
     def run(self, trial: TrialPlan) -> TargetRun:
         request = Request(
             url=f"{self._api_base_url.rstrip('/')}/api/agent-runs",
-            data=json.dumps(trial.command["input"], separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(trial.command["input"], separators=(",", ":")).encode(
+                "utf-8"
+            ),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
@@ -127,7 +137,11 @@ class TsGatewayTarget:
                 raise RuntimeError(f"TS gateway returned HTTP {status}")
 
             for raw_line in response:
-                line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
+                line = (
+                    raw_line.decode("utf-8")
+                    if isinstance(raw_line, bytes)
+                    else str(raw_line)
+                )
                 event = json.loads(line)
                 EVENT_VALIDATOR.validate(event)
                 events.append(event)
@@ -304,7 +318,9 @@ def _build_run_start_command(
     agent_run_id: str,
     parameters: dict[str, JsonScalar],
 ) -> dict[str, Any]:
-    behavior_version = _build_behavior_version(config.behavior_version or {}, parameters)
+    behavior_version = _build_behavior_version(
+        config.behavior_version or {}, parameters
+    )
     runtime_profile = _runtime_profile(config.runtime_profile)
     if config.runtime_profile == "published" or config.comparable:
         _require_complete_behavior_version(behavior_version)
@@ -375,7 +391,9 @@ def _require_complete_behavior_version(behavior_version: Mapping[str, str]) -> N
         )
 
 
-def _parameter_combinations(parameter_matrix: ParameterMatrix) -> list[dict[str, JsonScalar]]:
+def _parameter_combinations(
+    parameter_matrix: ParameterMatrix,
+) -> list[dict[str, JsonScalar]]:
     if not parameter_matrix:
         return [{}]
 
@@ -503,7 +521,9 @@ def _parse_json_scalar(value: str) -> JsonScalar:
     if isinstance(parsed, str | int | float | bool):
         return parsed
 
-    raise ValueError(f"Parameter values must be strings, numbers, or booleans: {value!r}")
+    raise ValueError(
+        f"Parameter values must be strings, numbers, or booleans: {value!r}"
+    )
 
 
 if __name__ == "__main__":

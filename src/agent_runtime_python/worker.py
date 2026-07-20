@@ -43,7 +43,11 @@ class AgentRunWorker:
         response = run_smoke_graph(message)
 
         return [
-            {"version": PROTOCOL_VERSION, "type": "run.started", "agentRunId": agent_run_id},
+            {
+                "version": PROTOCOL_VERSION,
+                "type": "run.started",
+                "agentRunId": agent_run_id,
+            },
             {
                 "version": PROTOCOL_VERSION,
                 "type": "progress.update",
@@ -76,7 +80,9 @@ def run_worker(
             output_stream.flush()
 
 
-def main(input_stream: Iterable[str] | None = None, output_stream: TextIO | None = None) -> int:
+def main(
+    input_stream: Iterable[str] | None = None, output_stream: TextIO | None = None
+) -> int:
     """Run the worker over stdin/stdout NDJSON."""
 
     run_worker(input_stream or sys.stdin, output_stream or sys.stdout)

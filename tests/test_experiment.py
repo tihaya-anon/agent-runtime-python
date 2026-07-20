@@ -1,11 +1,13 @@
 import json
 import unittest
+from collections.abc import Sequence
 from io import StringIO
 
 from agent_runtime_python.experiment import (
     DirectWorkerTarget,
     ExperimentConfig,
     JsonlResultRecorder,
+    JsonScalar,
     TsGatewayTarget,
     TargetRun,
     TrialPlanner,
@@ -15,7 +17,6 @@ from agent_runtime_python.experiment import (
     run_experiment,
 )
 from agent_runtime_python.protocol import COMMAND_VALIDATOR
-
 
 COMPLETE_BEHAVIOR_VERSION = {
     "graph": "graph:python-smoke",
@@ -29,7 +30,9 @@ COMPLETE_BEHAVIOR_VERSION = {
 
 
 class ExperimentTest(unittest.TestCase):
-    def test_build_trial_plan_generates_protocol_compliant_parameter_sweep(self) -> None:
+    def test_build_trial_plan_generates_protocol_compliant_parameter_sweep(
+        self,
+    ) -> None:
         # Given
         config = ExperimentConfig(
             message="Explain closures.",
@@ -53,7 +56,9 @@ class ExperimentTest(unittest.TestCase):
         for trial in trials:
             COMMAND_VALIDATOR.validate(trial.command)
             self.assertEqual(trial.command["type"], "run.start")
-            self.assertEqual(trial.command["runtimeProfile"]["profileId"], "runtime-development")
+            self.assertEqual(
+                trial.command["runtimeProfile"]["profileId"], "runtime-development"
+            )
             self.assertIn("trialParameter", trial.command["behaviorVersion"])
             self.assertIn("Trial parameters:", trial.command["input"]["message"])
 
@@ -103,7 +108,9 @@ class ExperimentTest(unittest.TestCase):
 
         # Then
         self.assertEqual(len(trials), 1)
-        self.assertEqual(trials[0].command["runtimeProfile"]["profileId"], "runtime-published")
+        self.assertEqual(
+            trials[0].command["runtimeProfile"]["profileId"], "runtime-published"
+        )
         COMMAND_VALIDATOR.validate(trials[0].command)
 
     def test_run_experiment_records_direct_worker_trial_results_as_jsonl(self) -> None:
@@ -151,7 +158,13 @@ class ExperimentTest(unittest.TestCase):
         result = record_trial_result(
             trial,
             TargetRun(
-                events=[{"version": 1, "type": "run.failed", "errorClassification": "validation"}],
+                events=[
+                    {
+                        "version": 1,
+                        "type": "run.failed",
+                        "errorClassification": "validation",
+                    }
+                ],
                 submitted_runtime_profile_id="runtime-development",
                 submitted_behavior_version=trial.command["behaviorVersion"],
             ),
@@ -200,7 +213,9 @@ class ExperimentTest(unittest.TestCase):
         target_run = target.run(trial)
 
         # Then
-        self.assertEqual(captured_requests[0].full_url, "http://localhost:3000/api/agent-runs")
+        self.assertEqual(
+            captured_requests[0].full_url, "http://localhost:3000/api/agent-runs"
+        )
         self.assertEqual(
             json.loads(captured_requests[0].data),
             {"message": trial.command["input"]["message"]},
@@ -211,12 +226,17 @@ class ExperimentTest(unittest.TestCase):
         )
         self.assertIsNone(target_run.submitted_runtime_profile_id)
         self.assertIsNone(target_run.submitted_behavior_version)
-        self.assertEqual(record_trial_result(trial, target_run).agent_run_id, "ar_gateway")
+        self.assertEqual(
+            record_trial_result(trial, target_run).agent_run_id, "ar_gateway"
+        )
 
     def test_build_trial_plan_accepts_custom_planner_extension_point(self) -> None:
         # Given
         class FixedPlanner:
-            def parameter_sets(self, _config: ExperimentConfig):
+            def parameter_sets(
+                self, config: ExperimentConfig
+            ) -> Sequence[dict[str, JsonScalar]]:
+                _ = config
                 return [{"candidate": "optuna-style"}]
 
         planner: TrialPlanner = FixedPlanner()

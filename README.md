@@ -17,6 +17,8 @@ Use Python 3.12 or newer.
 
 ```bash
 uv sync
+uv run black .
+uv run basedpyright
 uv run python -m unittest discover -s tests
 uv run python -m agent_runtime_python.worker
 ```

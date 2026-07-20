@@ -62,4 +62,6 @@ class AgentRunTelemetry:
         span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "failed")
         error_classification = terminal_event.get("errorClassification")
         if isinstance(error_classification, str):
-            span.set_attribute(AGENT_RUN_ERROR_CLASSIFICATION_ATTRIBUTE, error_classification)
+            span.set_attribute(
+                AGENT_RUN_ERROR_CLASSIFICATION_ATTRIBUTE, error_classification
+            )
