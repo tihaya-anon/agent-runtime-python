@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^(apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/format_edited_python_files.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Formatting edited Python files"
+          }
+        ]
+      }
+    ]
+  }
+}
