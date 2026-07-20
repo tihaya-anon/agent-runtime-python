@@ -14,10 +14,14 @@ from agent_runtime_python.protocol import (
     validation_failure_event,
 )
 from agent_runtime_python.smoke_graph import run_smoke_graph
+from agent_runtime_python.telemetry import AgentRunTelemetry
 
 
 class AgentRunWorker:
     """Executes one-command-at-a-time Agent Run worker protocol messages."""
+
+    def __init__(self, telemetry: AgentRunTelemetry | None = None) -> None:
+        self._telemetry = telemetry or AgentRunTelemetry()
 
     def handle_line(self, line: str) -> list[dict[str, Any]]:
         try:
@@ -28,7 +32,10 @@ class AgentRunWorker:
         if command["type"] == "run.cancel":
             return [{"version": PROTOCOL_VERSION, "type": "run.cancelled"}]
 
-        return self._run_agent(command)
+        with self._telemetry.start_run(command) as span:
+            events = self._run_agent(command)
+            self._telemetry.finish_run(span, events[-1])
+            return events
 
     def _run_agent(self, command: dict[str, Any]) -> list[dict[str, Any]]:
         agent_run_id = command["agentRunId"]

@@ -5,6 +5,12 @@ from typing import Any
 
 from agent_runtime_python import __version__
 from agent_runtime_python.protocol import EVENT_VALIDATOR
+from agent_runtime_python.telemetry import (
+    AGENT_BEHAVIOR_ATTRIBUTES,
+    AGENT_RUN_ID_ATTRIBUTE,
+    RUNTIME_PROFILE_ID_ATTRIBUTE,
+    agent_run_attributes,
+)
 from agent_runtime_python.worker import AgentRunWorker, main, run_worker
 
 VALID_START_COMMAND = (
@@ -83,6 +89,21 @@ class WorkerTest(unittest.TestCase):
         )
         self.assertEqual(events[0]["agentRunId"], "ar_python_smoke")
         self.assertIn("Explain closures.", events[2]["text"])
+
+    def test_worker_telemetry_attributes_align_with_ts_agent_run_names(self) -> None:
+        # Given
+        command = json.loads(VALID_START_COMMAND)
+
+        # When
+        attributes = agent_run_attributes(command)
+
+        # Then
+        self.assertEqual(attributes[AGENT_RUN_ID_ATTRIBUTE], "ar_python_smoke")
+        self.assertEqual(attributes[RUNTIME_PROFILE_ID_ATTRIBUTE], "runtime-development")
+        self.assertEqual(
+            attributes[AGENT_BEHAVIOR_ATTRIBUTES["graph"]],
+            "graph:python-smoke",
+        )
 
     def test_worker_reports_validation_failure_before_graph_execution(self) -> None:
         # Given
