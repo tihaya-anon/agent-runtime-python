@@ -12,6 +12,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/lint_on_stop.mjs\"",
+            "timeout": 60,
+            "statusMessage": "Running BasedPyright"
+          }
+        ]
+      }
     ]
   }
 }
