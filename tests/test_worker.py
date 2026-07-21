@@ -4,8 +4,7 @@ from io import StringIO
 from typing import Any
 
 from agent_runtime_python import __version__
-from agent_runtime_python.protocol import EVENT_VALIDATOR
-from agent_runtime_python.telemetry import (
+from agent_runtime_python.observability.telemetry import (
     AGENT_BEHAVIOR_ATTRIBUTES,
     AGENT_RUN_ID_ATTRIBUTE,
     GRAPH_ID_ATTRIBUTE,
@@ -13,7 +12,8 @@ from agent_runtime_python.telemetry import (
     RUNTIME_PROFILE_ID_ATTRIBUTE,
     agent_run_attributes,
 )
-from agent_runtime_python.worker import AgentRunWorker, main, run_worker
+from agent_runtime_python.runtime.protocol import EVENT_VALIDATOR
+from agent_runtime_python.runtime.worker import AgentRunWorker, main, run_worker
 
 VALID_START_COMMAND = (
     '{"version":1,'

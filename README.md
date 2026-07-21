@@ -26,7 +26,7 @@ uv sync
 uv run black .
 uv run basedpyright
 uv run python -m unittest discover -s tests
-uv run python -m agent_runtime_python.worker
+uv run python -m agent_runtime_python.runtime.worker
 ```
 
 The worker entry point reads Agent Run worker protocol commands as NDJSON from stdin and emits

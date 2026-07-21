@@ -83,7 +83,7 @@ GRAPH_REGISTRY = {
 Unsupported graph identifiers should fail before graph execution with a protocol-safe
 `run.failed` event.
 
-The initial registry lives in `agent_runtime_python.graphs` and maps `graph:python-smoke` to the
+The initial registry lives in `agent_runtime_python.runtime.graphs` and maps `graph:python-smoke` to the
 deterministic LangGraph smoke graph. New provider-owned graphs should be added there behind stable
 behavior identifiers.
 

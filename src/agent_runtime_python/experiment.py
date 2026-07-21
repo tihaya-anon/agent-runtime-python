@@ -7,26 +7,28 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
-from typing import Any, Callable, Literal, Protocol, TextIO
+from typing import Any, Callable, Literal, Protocol, TextIO, cast
 from urllib.request import Request, urlopen
 
-from agent_runtime_python.protocol import (
+from agent_runtime_python.observability.telemetry import (
+    AgentRunTelemetry,
+    configure_telemetry_from_environment,
+)
+from agent_runtime_python.runtime.protocol import (
     COMMAND_VALIDATOR,
     EVENT_VALIDATOR,
     PROTOCOL_VERSION,
 )
-from agent_runtime_python.telemetry import (
-    AgentRunTelemetry,
-    configure_telemetry_from_environment,
-)
-from agent_runtime_python.worker import AgentRunWorker
+from agent_runtime_python.runtime.worker import AgentRunWorker
 
 JsonScalar = str | int | float | bool
 ParameterMatrix = Mapping[str, Sequence[JsonScalar]]
 RuntimeProfileKind = Literal["development", "published"]
 TargetKind = Literal["direct-worker", "internal-http", "ts-gateway"]
 ParameterDistributionKind = Literal["categorical", "int", "float"]
+TrialOutcome = Literal["succeeded", "failed", "cancelled"]
 
 BEHAVIOR_VERSION_DIMENSIONS = (
     "graph",
@@ -75,7 +77,7 @@ class TrialResult:
     trial_id: str
     agent_run_id: str
     parameters: dict[str, JsonScalar]
-    outcome: Literal["succeeded", "failed", "cancelled"]
+    outcome: TrialOutcome
     terminal_event: str
     response_summary: str
     requested_runtime_profile_id: str
@@ -194,14 +196,8 @@ class DirectWorkerTarget:
         self._worker = worker or AgentRunWorker()
 
     def run(self, trial: TrialPlan) -> TargetRun:
-        command = json.dumps(trial.command, separators=(",", ":"))
-        return TargetRun(
-            events=self._worker.handle_line(f"{command}\n"),
-            submitted_runtime_profile_id=str(
-                trial.command["runtimeProfile"]["profileId"]
-            ),
-            submitted_behavior_version=dict(trial.command["behaviorVersion"]),
-        )
+        events = self._worker.handle_line(_worker_command_line(trial.command))
+        return _worker_target_run(events, trial)
 
 
 class InternalHttpStreamingTarget:
@@ -216,20 +212,15 @@ class InternalHttpStreamingTarget:
     def run(self, trial: TrialPlan) -> TargetRun:
         request = Request(
             url=f"{self._api_base_url.rstrip('/')}/internal/agent-runs",
-            data=json.dumps(trial.command, separators=(",", ":")).encode("utf-8"),
+            data=_json_bytes(trial.command),
             headers={
                 "Accept": "application/x-ndjson",
                 "Content-Type": "application/json",
             },
             method="POST",
         )
-        return TargetRun(
-            events=_read_ndjson_worker_events(request, self._open_agent_run),
-            submitted_runtime_profile_id=str(
-                trial.command["runtimeProfile"]["profileId"]
-            ),
-            submitted_behavior_version=dict(trial.command["behaviorVersion"]),
-        )
+        events = _read_ndjson_worker_events(request, self._open_agent_run)
+        return _worker_target_run(events, trial)
 
 
 class TsGatewayTarget:
@@ -244,9 +235,7 @@ class TsGatewayTarget:
     def run(self, trial: TrialPlan) -> TargetRun:
         request = Request(
             url=f"{self._api_base_url.rstrip('/')}/api/agent-runs",
-            data=json.dumps(trial.command["input"], separators=(",", ":")).encode(
-                "utf-8"
-            ),
+            data=_json_bytes(trial.command["input"]),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
@@ -262,14 +251,8 @@ class JsonlResultRecorder:
         self._output_stream = output_stream
 
     def record(self, result: TrialResult) -> None:
-        record = json.dumps(
-            _trial_result_to_record(result),
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        self._output_stream.write(
-            f"{record}\n",
-        )
+        record = _stable_json_record(_trial_result_to_record(result))
+        self._output_stream.write(f"{record}\n")
         self._output_stream.flush()
 
 
@@ -280,23 +263,14 @@ def build_trial_plan(
     if not config.message.strip():
         raise ValueError("Experiment message must not be empty")
 
-    trials = []
     active_planner = planner or ParameterSweepPlanner()
-    for index, parameters in enumerate(active_planner.parameter_sets(config), start=1):
-        trial_id = f"{config.study_id}-trial-{index:04d}"
-        agent_run_id = f"ar_{_identifier_token(trial_id)}"
-        command = _build_run_start_command(config, trial_id, agent_run_id, parameters)
-        COMMAND_VALIDATOR.validate(command)
-        trials.append(
-            TrialPlan(
-                trial_id=trial_id,
-                agent_run_id=agent_run_id,
-                parameters=parameters,
-                command=command,
-            ),
+    return [
+        _build_trial(config, index, parameters)
+        for index, parameters in enumerate(
+            active_planner.parameter_sets(config),
+            start=1,
         )
-
-    return trials
+    ]
 
 
 def run_experiment(
@@ -335,28 +309,16 @@ def record_trial_result(trial: TrialPlan, target_run: TargetRun) -> TrialResult:
 
     terminal_event = events[-1]
     terminal_type = terminal_event.get("type")
-    if terminal_type == "run.completed":
-        outcome: Literal["succeeded", "failed", "cancelled"] = "succeeded"
-    elif terminal_type == "run.cancelled":
-        outcome = "cancelled"
-    else:
-        outcome = "failed"
-
-    response_text = "".join(
-        str(event["text"])
-        for event in events
-        if event.get("type") == "message.delta" and isinstance(event.get("text"), str)
-    )
 
     return TrialResult(
         trial_id=trial.trial_id,
         agent_run_id=_event_agent_run_id(events, trial.agent_run_id),
         parameters=trial.parameters,
-        outcome=outcome,
+        outcome=_trial_outcome(terminal_type),
         terminal_event=str(terminal_type),
-        response_summary=_summarize_response(response_text),
-        requested_runtime_profile_id=str(trial.command["runtimeProfile"]["profileId"]),
-        requested_behavior_version=dict(trial.command["behaviorVersion"]),
+        response_summary=_summarize_response(_response_text(events)),
+        requested_runtime_profile_id=_command_runtime_profile_id(trial.command),
+        requested_behavior_version=_command_behavior_version(trial.command),
         submitted_runtime_profile_id=target_run.submitted_runtime_profile_id,
         submitted_behavior_version=target_run.submitted_behavior_version,
         error_classification=_optional_text(terminal_event.get("errorClassification")),
@@ -428,6 +390,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Recorded {len(results)} trial result(s) in {args.output}")
     return 0
+
+
+def _build_trial(
+    config: ExperimentConfig,
+    index: int,
+    parameters: dict[str, JsonScalar],
+) -> TrialPlan:
+    trial_id = f"{config.study_id}-trial-{index:04d}"
+    agent_run_id = f"ar_{_identifier_token(trial_id)}"
+    command = _build_run_start_command(config, trial_id, agent_run_id, parameters)
+    COMMAND_VALIDATOR.validate(command)
+    return TrialPlan(
+        trial_id=trial_id,
+        agent_run_id=agent_run_id,
+        parameters=parameters,
+        command=command,
+    )
 
 
 def _build_run_start_command(
@@ -515,20 +494,27 @@ def _parameter_combinations(
     if not parameter_matrix:
         return [{}]
 
-    combinations: list[dict[str, JsonScalar]] = [{}]
+    parameter_items = _validated_parameter_items(parameter_matrix)
+    parameter_names = [name for name, _values in parameter_items]
+    value_sets = [values for _name, values in parameter_items]
+    return [
+        dict(zip(parameter_names, values, strict=True))
+        for values in product(*value_sets)
+    ]
+
+
+def _validated_parameter_items(
+    parameter_matrix: ParameterMatrix,
+) -> list[tuple[str, Sequence[JsonScalar]]]:
+    items = []
     for name, values in parameter_matrix.items():
         if not name.strip():
             raise ValueError("Parameter names must not be empty")
         if not values:
             raise ValueError(f"Parameter {name} must include at least one value")
+        items.append((name, values))
 
-        next_combinations = []
-        for combination in combinations:
-            for value in values:
-                next_combinations.append({**combination, name: value})
-        combinations = next_combinations
-
-    return combinations
+    return items
 
 
 def _validate_distribution(distribution: ParameterDistribution) -> None:
@@ -558,21 +544,46 @@ def _suggest_parameter_value(
     trial: OptunaTrialProtocol | None,
 ) -> JsonScalar:
     if distribution.kind == "categorical":
-        if trial is not None:
-            return trial.suggest_categorical(distribution.name, distribution.choices)
-        return distribution.choices[trial_index % len(distribution.choices)]
+        return _suggest_categorical(distribution, trial_index, trial)
 
     if distribution.kind == "int":
-        low = _required_int(distribution.low)
-        high = _required_int(distribution.high)
-        step = int(distribution.step or 1)
-        if trial is not None:
-            return trial.suggest_int(
-                distribution.name, low, high, step, distribution.log
-            )
-        values = list(range(low, high + 1, step))
-        return values[trial_index % len(values)]
+        return _suggest_int(distribution, trial_index, trial)
 
+    return _suggest_float(distribution, trial_index, trial_count, trial)
+
+
+def _suggest_categorical(
+    distribution: ParameterDistribution,
+    trial_index: int,
+    trial: OptunaTrialProtocol | None,
+) -> JsonScalar:
+    if trial is not None:
+        return trial.suggest_categorical(distribution.name, distribution.choices)
+
+    return distribution.choices[trial_index % len(distribution.choices)]
+
+
+def _suggest_int(
+    distribution: ParameterDistribution,
+    trial_index: int,
+    trial: OptunaTrialProtocol | None,
+) -> int:
+    low = _required_int(distribution.low)
+    high = _required_int(distribution.high)
+    step = int(distribution.step or 1)
+    if trial is not None:
+        return trial.suggest_int(distribution.name, low, high, step, distribution.log)
+
+    values = range(low, high + 1, step)
+    return values[trial_index % len(values)]
+
+
+def _suggest_float(
+    distribution: ParameterDistribution,
+    trial_index: int,
+    trial_count: int,
+    trial: OptunaTrialProtocol | None,
+) -> float:
     low = _required_float(distribution.low)
     high = _required_float(distribution.high)
     step = float(distribution.step) if distribution.step is not None else None
@@ -624,6 +635,18 @@ def _stable_json(value: Mapping[str, JsonScalar]) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
+def _stable_json_record(value: Mapping[str, Any]) -> str:
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _json_bytes(value: Mapping[str, Any]) -> bytes:
+    return json.dumps(value, separators=(",", ":")).encode("utf-8")
+
+
+def _worker_command_line(command: Mapping[str, Any]) -> str:
+    return f"{json.dumps(command, separators=(',', ':'))}\n"
+
+
 def _summarize_response(response_text: str, limit: int = 240) -> str:
     normalized = " ".join(response_text.split())
     if len(normalized) <= limit:
@@ -634,6 +657,50 @@ def _summarize_response(response_text: str, limit: int = 240) -> str:
 
 def _optional_text(value: Any) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _trial_outcome(terminal_type: object) -> TrialOutcome:
+    if terminal_type == "run.completed":
+        return "succeeded"
+    if terminal_type == "run.cancelled":
+        return "cancelled"
+
+    return "failed"
+
+
+def _response_text(events: Sequence[Mapping[str, Any]]) -> str:
+    return "".join(
+        str(event["text"])
+        for event in events
+        if event.get("type") == "message.delta" and isinstance(event.get("text"), str)
+    )
+
+
+def _command_runtime_profile_id(command: Mapping[str, Any]) -> str:
+    runtime_profile = command["runtimeProfile"]
+    if not isinstance(runtime_profile, Mapping):
+        raise TypeError("runtimeProfile must be an object")
+
+    return str(runtime_profile["profileId"])
+
+
+def _command_behavior_version(command: Mapping[str, Any]) -> dict[str, str]:
+    behavior_version = command["behaviorVersion"]
+    if not isinstance(behavior_version, Mapping):
+        raise TypeError("behaviorVersion must be an object")
+
+    return dict(cast(Mapping[str, str], behavior_version))
+
+
+def _worker_target_run(
+    events: list[dict[str, Any]],
+    trial: TrialPlan,
+) -> TargetRun:
+    return TargetRun(
+        events=events,
+        submitted_runtime_profile_id=_command_runtime_profile_id(trial.command),
+        submitted_behavior_version=_command_behavior_version(trial.command),
+    )
 
 
 def _event_agent_run_id(events: Sequence[Mapping[str, Any]], fallback: str) -> str:
@@ -657,18 +724,25 @@ def _read_ndjson_worker_events(
             raise RuntimeError(f"Agent Run target returned HTTP {status}")
 
         for raw_line in response:
-            line = (
-                raw_line.decode("utf-8")
-                if isinstance(raw_line, bytes)
-                else str(raw_line)
-            )
+            line = _response_line(raw_line)
             if not line.strip():
                 continue
-            event = json.loads(line)
-            EVENT_VALIDATOR.validate(event)
-            events.append(event)
+            events.append(_decode_worker_event(line))
 
     return events
+
+
+def _response_line(raw_line: Any) -> str:
+    if isinstance(raw_line, bytes):
+        return raw_line.decode("utf-8")
+
+    return str(raw_line)
+
+
+def _decode_worker_event(line: str) -> dict[str, Any]:
+    event = json.loads(line)
+    EVENT_VALIDATOR.validate(event)
+    return event
 
 
 def _trial_result_to_record(result: TrialResult) -> dict[str, Any]:
@@ -706,12 +780,7 @@ def _parse_parameter_matrix(entries: Sequence[str]) -> dict[str, list[JsonScalar
 
 
 def _parse_key_value_entries(entries: Sequence[str]) -> dict[str, str]:
-    parsed = {}
-    for entry in entries:
-        name, value = _split_key_value_entry(entry)
-        parsed[name] = value
-
-    return parsed
+    return dict(_split_key_value_entry(entry) for entry in entries)
 
 
 def _split_key_value_entry(entry: str) -> tuple[str, str]:

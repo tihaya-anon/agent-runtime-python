@@ -8,7 +8,7 @@ internal HTTP streaming, runtime experiments, graph registration, and telemetry.
 Run the stdio NDJSON worker:
 
 ```bash
-uv run python -m agent_runtime_python.worker
+uv run python -m agent_runtime_python.runtime.worker
 ```
 
 Submit one complete `run.start` command per line. The worker validates each command against the
@@ -173,7 +173,7 @@ GRAPH_REGISTRY = {
 }
 ```
 
-Add provider-owned graphs in `agent_runtime_python.graphs`. TypeScript should pass only accepted
+Add provider-owned graphs in `agent_runtime_python.runtime.graphs`. TypeScript should pass only accepted
 behavior identifiers in `behaviorVersion.graph`; it must not import Python graph objects or depend on
 LangGraph internals.
 

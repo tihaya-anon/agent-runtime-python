@@ -19,7 +19,7 @@ from agent_runtime_python.experiment import (
     record_trial_result,
     run_experiment,
 )
-from agent_runtime_python.protocol import COMMAND_VALIDATOR
+from agent_runtime_python.runtime.protocol import COMMAND_VALIDATOR
 
 COMPLETE_BEHAVIOR_VERSION = {
     "graph": "graph:python-smoke",

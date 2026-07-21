@@ -4,7 +4,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from agent_runtime_python.api.app import NDJSON_CONTENT_TYPE, create_app
-from agent_runtime_python.protocol import EVENT_VALIDATOR
+from agent_runtime_python.runtime.protocol import EVENT_VALIDATOR
 
 VALID_START_COMMAND = (
     '{"version":1,'

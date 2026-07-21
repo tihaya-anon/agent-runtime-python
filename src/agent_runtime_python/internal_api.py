@@ -9,7 +9,9 @@ from collections.abc import Sequence
 import uvicorn
 
 from agent_runtime_python.api import create_app
-from agent_runtime_python.telemetry import configure_telemetry_from_environment
+from agent_runtime_python.observability.telemetry import (
+    configure_telemetry_from_environment,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

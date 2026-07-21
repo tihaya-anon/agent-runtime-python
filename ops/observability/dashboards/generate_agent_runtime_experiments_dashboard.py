@@ -16,7 +16,7 @@ from grafana_foundation_sdk.cog.encoder import JSONEncoder
 from grafana_foundation_sdk.models.dashboard import DataSourceRef, GridPos
 from openinference.semconv.trace import SpanAttributes
 
-from agent_runtime_python.telemetry import (
+from agent_runtime_python.observability.telemetry import (
     AGENT_RUN_ERROR_CLASSIFICATION_ATTRIBUTE,
     AGENT_RUN_ID_ATTRIBUTE,
     AGENT_RUN_OUTCOME_ATTRIBUTE,
