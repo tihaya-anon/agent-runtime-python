@@ -1,0 +1,330 @@
+{
+  "annotations": {},
+  "description": "Inspect provider-owned Python runtime studies, trials, graphs, nodes, outcomes, and correlated logs.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "filters": [],
+          "limit": 200,
+          "query": "{ resource.service.name = \"agent-runtime-python\" && span:name = \"experiment.trial\" && (span.\"metadata.experiment.study_id\" = \"$study_id\" || \"$study_id\" = \"\") } | select(span:name, trace:id, span:duration, span:status, span.\"metadata.experiment.study_id\", span.\"metadata.experiment.trial_id\", span.\"metadata.experiment.target\", span.\"metadata.experiment.outcome\", span.\"session.id\", span.\"metadata.agent_run.outcome\")",
+          "queryType": "traceql",
+          "refId": "A",
+          "tableType": "spans"
+        }
+      ],
+      "title": "Recent Experiment Trials",
+      "transformations": [],
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 2,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (span_name, status_code) (rate(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\"}[5m]))",
+          "legendFormat": "{{span_name}} {{status_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Trial Starts by Outcome",
+      "transformations": [],
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 3,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_latency_bucket{service=\"agent-runtime-python\",span_name=\"agent.run\"}[5m])))",
+          "legendFormat": "{{span_name}} {{status_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent Run Duration p95",
+      "transformations": [],
+      "transparent": false,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 4,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "filters": [],
+          "limit": 200,
+          "query": "{ resource.service.name = \"agent-runtime-python\" && span.\"metadata.experiment.study_id\" = \"$study_id\" && span.\"metadata.experiment.trial_id\" = \"$trial_id\" } &>> { true } | select(span:name, trace:id, span:duration, span:status, span.\"metadata.experiment.study_id\", span.\"metadata.experiment.trial_id\", span.\"session.id\", span.\"metadata.runtime_profile.id\", span.\"metadata.agent_run.outcome\", span.\"metadata.agent_run.error_classification\")",
+          "queryType": "traceql",
+          "refId": "A",
+          "tableType": "spans"
+        }
+      ],
+      "title": "Selected Trial Trace",
+      "transformations": [],
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 5,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "filters": [],
+          "limit": 200,
+          "query": "{ resource.service.name = \"agent-runtime-python\" && (span.\"metadata.agent_graph.id\" = \"$graph_id\" || \"$graph_id\" = \"\") && (span:name = \"agent.graph\" || span:name = \"agent.graph.node\") } | select(span:name, trace:id, span:duration, span:status, span.\"metadata.agent_graph.id\", span.\"graph.node.name\", span.\"openinference.span.kind\", span.\"llm.model_name\", span.\"tool.name\")",
+          "queryType": "traceql",
+          "refId": "A",
+          "tableType": "spans"
+        }
+      ],
+      "title": "Graph and Node Breakdown",
+      "transformations": [],
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 6,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "filters": [],
+          "limit": 100,
+          "query": "{ resource.service.name = \"agent-runtime-python\" && span:name = \"agent.run\" && span.\"metadata.agent_run.outcome\" = \"failed\" && (span.\"session.id\" = \"$agent_run_id\" || \"$agent_run_id\" = \"\") } | select(span:name, trace:id, span:duration, span:status, span.\"session.id\", span.\"metadata.agent_run.outcome\", span.\"metadata.agent_run.error_classification\", span.\"metadata.runtime_profile.id\", span.\"metadata.agent_graph.id\")",
+          "queryType": "traceql",
+          "refId": "A",
+          "tableType": "spans"
+        }
+      ],
+      "title": "Failed Runtime Runs",
+      "transformations": [],
+      "transparent": false,
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "id": 7,
+      "options": null,
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"agent-runtime-python\"} | json | __error__=\"\" | attributes_metadata_experiment_study_id=\"$study_id\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Correlated Runtime Logs",
+      "transformations": [],
+      "transparent": false,
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": [
+    "agent-runtime-python",
+    "experiments",
+    "langgraph"
+  ],
+  "templating": {
+    "list": [
+      {
+        "auto": false,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "hide": 0,
+        "id": "00000000-0000-0000-0000-000000000000",
+        "includeAll": false,
+        "label": "Study ID",
+        "multi": false,
+        "name": "study_id",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "auto": false,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "hide": 0,
+        "id": "00000000-0000-0000-0000-000000000000",
+        "includeAll": false,
+        "label": "Trial ID",
+        "multi": false,
+        "name": "trial_id",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "auto": false,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "hide": 0,
+        "id": "00000000-0000-0000-0000-000000000000",
+        "includeAll": false,
+        "label": "Graph ID",
+        "multi": false,
+        "name": "graph_id",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "auto": false,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "hide": 0,
+        "id": "00000000-0000-0000-0000-000000000000",
+        "includeAll": false,
+        "label": "Agent Run ID",
+        "multi": false,
+        "name": "agent_run_id",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Agent Runtime Experiments",
+  "uid": "agent-runtime-experiments"
+}

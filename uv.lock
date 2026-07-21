@@ -9,6 +9,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
     { name = "langgraph" },
+    { name = "openinference-semantic-conventions" },
     { name = "opentelemetry-api" },
 ]
 
@@ -16,12 +17,14 @@ dependencies = [
 dev = [
     { name = "basedpyright" },
     { name = "black" },
+    { name = "grafana-foundation-sdk" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "langgraph", specifier = ">=1.2.9" },
+    { name = "openinference-semantic-conventions", specifier = ">=0.1.30" },
     { name = "opentelemetry-api", specifier = ">=1.44.0" },
 ]
 
@@ -29,6 +32,7 @@ requires-dist = [
 dev = [
     { name = "basedpyright", specifier = ">=1.39.9" },
     { name = "black", specifier = ">=26.5.1" },
+    { name = "grafana-foundation-sdk", specifier = ">=1769699998!10.1.0" },
 ]
 
 [[package]]
@@ -204,6 +208,15 @@ source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
+]
+
+[[package]]
+name = "grafana-foundation-sdk"
+version = "1769699998!10.1.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/40/16/ce146db5395857ddc19f71f7b7b6bbe76689f5085467ddc93cbd638ef6f3/grafana_foundation_sdk-1769699998!10.1.0.tar.gz", hash = "sha256:8ecfb7dc8b66fc5cbdbf7ea48dc19169aed03e698ba490f1001bc501a194c5c7", size = 410531, upload-time = "2026-01-29T15:39:41.171Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/17/3b/49dd4a2137dd193b7c77a034f077c370119ecee9cb45fd0b819023d19bad/grafana_foundation_sdk-1769699998!10.1.0-py3-none-any.whl", hash = "sha256:d131ffe49057fb669ba31ce7e28a303c96b3aecf4332b20de33cfa55110d498c", size = 318469, upload-time = "2026-01-29T15:39:40.08Z" },
 ]
 
 [[package]]
@@ -439,6 +452,15 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/04/96/d931255cf9d11a84d6b54d882dba7434646467d568ccf070ea3418638df3/nodejs_wheel_binaries-24.16.0-py2.py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:f1a3d8f7b4491cbbd023ba3fc4e901fcca2d9fb80d57f24ba3890de8b1dbac03", size = 62841759, upload-time = "2026-05-30T16:51:59.407Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/a2/7b/8b7a3f41bc255411be30b6d7d288aab8ffd9ea2055db8555ced3548007b9/nodejs_wheel_binaries-24.16.0-py2.py3-none-win_amd64.whl", hash = "sha256:bb136be9944f0662dcf1120f45193a6b75b13fac378971a95cc42c9f879a81aa", size = 42027734, upload-time = "2026-05-30T16:52:03.348Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/17/66/1ed71f1f529b8ca727d42c7ceb9db0bef145ce4a13dfc86fb50aa44f3be6/nodejs_wheel_binaries-24.16.0-py2.py3-none-win_arm64.whl", hash = "sha256:8308940b5edd0a50dc5267ea36ba21c9f668e83fe0d9f293937174d3a7e31c36", size = 39714528, upload-time = "2026-05-30T16:52:06.421Z" },
+]
+
+[[package]]
+name = "openinference-semantic-conventions"
+version = "0.1.30"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/2c/51/8ba1182ee86fc79793d5ff2d11e7fdcda10ded2d01f3e46ca6fcf0568213/openinference_semantic_conventions-0.1.30.tar.gz", hash = "sha256:81fece76e09c83789e35c393b8b30523481eeabf1008745b955631a53e3221d9", size = 13391, upload-time = "2026-05-22T21:10:44.065Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/b6/76/5b7e78cf0de38589b821bbe8e9c29c59a6e76edfb980488d0854cbb90f7c/openinference_semantic_conventions-0.1.30-py3-none-any.whl", hash = "sha256:36d946d3f95f699b7c4b12324ae9c1f02d6c7750df11eece56aa159cff430b3d", size = 10911, upload-time = "2026-05-22T21:10:43.04Z" },
 ]
 
 [[package]]

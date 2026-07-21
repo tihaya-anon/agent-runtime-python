@@ -17,7 +17,30 @@ vendored Agent Run worker schema and emits validated Agent Run worker events as 
 Minimal development command:
 
 ```json
-{"version":1,"type":"run.start","agentRunId":"ar_python_smoke","input":{"message":"Explain closures."},"runtimeProfile":{"schemaVersion":1,"profileId":"runtime-development","runtimePolicy":{"agentBehaviorVersion":{"policy":"development","requireCompleteDimensions":false,"rejectUnresolvedDimensions":false,"allowIncompleteAdHocRuns":true,"incompleteAdHocRuns":{"comparable":false,"promotable":false}},"sourceRevision":{"requireCleanForPublishedGraphVersions":false}}},"behaviorVersion":{"graph":"graph:python-smoke"}}
+{
+  "version": 1,
+  "type": "run.start",
+  "agentRunId": "ar_python_smoke",
+  "input": { "message": "Explain closures." },
+  "runtimeProfile": {
+    "schemaVersion": 1,
+    "profileId": "runtime-development",
+    "runtimePolicy": {
+      "agentBehaviorVersion": {
+        "policy": "development",
+        "requireCompleteDimensions": false,
+        "rejectUnresolvedDimensions": false,
+        "allowIncompleteAdHocRuns": true,
+        "incompleteAdHocRuns": {
+          "comparable": false,
+          "promotable": false
+        }
+      },
+      "sourceRevision": { "requireCleanForPublishedGraphVersions": false }
+    }
+  },
+  "behaviorVersion": { "graph": "graph:python-smoke" }
+}
 ```
 
 The smoke graph returns deterministic `message.delta` output and completes the run. Unsupported
@@ -145,3 +168,26 @@ OpenTelemetry spans are provider-owned and use bounded metadata:
 
 Do not emit raw prompts, provider payloads, credentials, stack traces, raw LangGraph chunks, or tool
 arguments across the TS boundary or as default span attributes.
+
+## Experiment Dashboard
+
+The experiment Grafana dashboard lives in this repository so the dashboard tracks Python runtime
+telemetry semantics:
+
+- Source: `ops/observability/dashboards/generate_agent_runtime_experiments_dashboard.py`
+- Generated JSON: `ops/observability/dashboards/agent-runtime-experiments.dashboard.json`
+
+Regenerate the JSON after intentional dashboard changes:
+
+```bash
+uv run python ops/observability/dashboards/generate_agent_runtime_experiments_dashboard.py
+```
+
+The generator uses the Python `grafana-foundation-sdk` package for dashboard construction and
+`openinference-semantic-conventions` for shared OpenInference span attributes such as session id,
+graph node name, LLM model name, and tool name. Runtime-specific attributes such as experiment study
+id, trial id, behavior version, and graph id remain defined by this repository.
+
+Configure the PGL stack or Grafana Git provisioning to load dashboard JSON from
+`ops/observability/dashboards/*.dashboard.json` in this repo. The production Agent Run diagnosis
+dashboard in `agent-workbench` remains separate; this dashboard is for detailed runtime experiments.

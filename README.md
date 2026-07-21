@@ -135,3 +135,8 @@ Telemetry attributes include Agent Run id, runtime profile id, behavior-version 
 id, node name, experiment study/trial ids, experiment target, selected parameters, outcome, and
 worker error classification. Raw prompts, provider payloads, credentials, stack traces, and tool
 arguments must not be emitted across the TS boundary.
+
+The detailed experiment dashboard is generated from Python source at
+`ops/observability/dashboards/generate_agent_runtime_experiments_dashboard.py` and committed as
+`ops/observability/dashboards/agent-runtime-experiments.dashboard.json` for Grafana Git
+provisioning.

@@ -132,7 +132,7 @@ class WorkerTest(unittest.TestCase):
     def test_graph_telemetry_constants_have_bounded_attribute_names(self) -> None:
         # Given / When / Then
         self.assertEqual(GRAPH_ID_ATTRIBUTE, "metadata.agent_graph.id")
-        self.assertEqual(GRAPH_NODE_NAME_ATTRIBUTE, "metadata.agent_graph.node")
+        self.assertEqual(GRAPH_NODE_NAME_ATTRIBUTE, "graph.node.name")
 
     def test_worker_reports_validation_failure_before_graph_execution(self) -> None:
         # Given

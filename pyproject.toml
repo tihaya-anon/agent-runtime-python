@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "jsonschema>=4.26.0",
     "langgraph>=1.2.9",
+    "openinference-semantic-conventions>=0.1.30",
     "opentelemetry-api>=1.44.0",
 ]
 
@@ -32,4 +33,5 @@ target-version = ["py312"]
 dev = [
     "basedpyright>=1.39.9",
     "black>=26.5.1",
+    "grafana-foundation-sdk>=1769699998!10.1.0",
 ]

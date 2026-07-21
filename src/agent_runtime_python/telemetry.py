@@ -5,10 +5,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any
 
+from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from opentelemetry.trace import Span
 
-AGENT_RUN_ID_ATTRIBUTE = "session.id"
+AGENT_RUN_ID_ATTRIBUTE = SpanAttributes.SESSION_ID
 AGENT_RUN_OUTCOME_ATTRIBUTE = "metadata.agent_run.outcome"
 AGENT_RUN_ERROR_CLASSIFICATION_ATTRIBUTE = "metadata.agent_run.error_classification"
 RUNTIME_PROFILE_ID_ATTRIBUTE = "metadata.runtime_profile.id"
@@ -17,7 +18,7 @@ EXPERIMENT_TRIAL_ID_ATTRIBUTE = "metadata.experiment.trial_id"
 EXPERIMENT_TARGET_ATTRIBUTE = "metadata.experiment.target"
 EXPERIMENT_OUTCOME_ATTRIBUTE = "metadata.experiment.outcome"
 GRAPH_ID_ATTRIBUTE = "metadata.agent_graph.id"
-GRAPH_NODE_NAME_ATTRIBUTE = "metadata.agent_graph.node"
+GRAPH_NODE_NAME_ATTRIBUTE = SpanAttributes.GRAPH_NODE_NAME
 AGENT_BEHAVIOR_ATTRIBUTES = {
     "graph": "metadata.agent_behavior_version.graph",
     "state": "metadata.agent_behavior_version.state",
