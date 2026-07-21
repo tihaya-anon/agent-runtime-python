@@ -11,10 +11,11 @@ ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY README.md ./
 COPY src ./src
+RUN uv sync --locked --no-dev --no-editable
 
 EXPOSE 8088
 
