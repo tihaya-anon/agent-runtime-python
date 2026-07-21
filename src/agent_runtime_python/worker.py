@@ -6,6 +6,7 @@ import sys
 from collections.abc import Iterable
 from typing import Any, TextIO
 
+from agent_runtime_python.graphs import UnsupportedGraphError, run_registered_graph
 from agent_runtime_python.protocol import (
     PROTOCOL_VERSION,
     ProtocolValidationError,
@@ -13,7 +14,6 @@ from agent_runtime_python.protocol import (
     parse_command_line,
     validation_failure_event,
 )
-from agent_runtime_python.smoke_graph import run_smoke_graph
 from agent_runtime_python.telemetry import AgentRunTelemetry
 
 
@@ -40,9 +40,8 @@ class AgentRunWorker:
     def _run_agent(self, command: dict[str, Any]) -> list[dict[str, Any]]:
         agent_run_id = command["agentRunId"]
         message = command["input"]["message"]
-        response = run_smoke_graph(message)
-
-        return [
+        graph_id = command["behaviorVersion"]["graph"]
+        events = [
             {
                 "version": PROTOCOL_VERSION,
                 "type": "run.started",
@@ -52,15 +51,54 @@ class AgentRunWorker:
                 "version": PROTOCOL_VERSION,
                 "type": "progress.update",
                 "scope": "run",
-                "label": "smoke-graph",
+                "label": graph_id,
                 "status": "started",
             },
+        ]
+
+        try:
+            response = run_registered_graph(graph_id, message, self._telemetry)
+        except UnsupportedGraphError:
+            return [
+                *events,
+                {
+                    "version": PROTOCOL_VERSION,
+                    "type": "progress.update",
+                    "scope": "run",
+                    "label": graph_id,
+                    "status": "failed",
+                },
+                {
+                    "version": PROTOCOL_VERSION,
+                    "type": "run.failed",
+                    "errorClassification": "validation",
+                },
+            ]
+        except Exception:
+            return [
+                *events,
+                {
+                    "version": PROTOCOL_VERSION,
+                    "type": "progress.update",
+                    "scope": "run",
+                    "label": graph_id,
+                    "status": "failed",
+                },
+                {
+                    "version": PROTOCOL_VERSION,
+                    "type": "run.failed",
+                    "errorClassification": "internal",
+                },
+            ]
+
+        return [
+            *events,
             {"version": PROTOCOL_VERSION, "type": "message.delta", "text": response},
             {
                 "version": PROTOCOL_VERSION,
                 "type": "progress.update",
                 "scope": "run",
-                "label": "smoke-graph",
+                "label": graph_id,
                 "status": "completed",
             },
             {"version": PROTOCOL_VERSION, "type": "run.completed"},

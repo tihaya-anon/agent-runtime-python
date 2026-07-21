@@ -11,6 +11,12 @@ events back to the TypeScript gateway.
 `agent-workbench` remains the owner of the TypeScript web/API control plane, canonical protocol
 schemas, and browser-facing Agent Run stream.
 
+See `docs/agents/runtime-boundary.md` for the runtime boundary, experiment scope, and future
+internal HTTP streaming API guidance. See `docs/agents/runtime-usage.md` for worker, internal API,
+experiment, graph registry, and telemetry usage. Python experiments should focus on LangGraph
+runtime behavior; whole-product path checks through the TS API belong outside this runtime
+repository.
+
 ## Local Development
 
 Use Python 3.12 or newer.
@@ -27,6 +33,16 @@ The worker entry point reads Agent Run worker protocol commands as NDJSON from s
 protocol-compliant worker events as NDJSON on stdout. The current graph is a deterministic LangGraph
 smoke graph. Full production graph execution, cancellation cleanup for long-running runs, and
 telemetry are tracked from `agent-workbench` migration issues.
+
+The provider-side internal HTTP adapter exposes the same worker protocol over NDJSON:
+
+```bash
+uv run python -m agent_runtime_python.internal_api --host 127.0.0.1 --port 8088
+```
+
+It accepts `POST /internal/agent-runs` with a complete `run.start` worker command and returns
+`application/x-ndjson` worker events. It also accepts
+`POST /internal/agent-runs/{agentRunId}/cancel` and returns a protocol `run.cancelled` event.
 
 ## Protocol
 
@@ -68,6 +84,28 @@ leaving gateway-owned run identifiers and behavior acceptance in the TypeScript 
 the gateway exposes request-level behavior overrides, gateway trial records keep submitted profile
 and behavior-version metadata as `null`.
 
+To run a sweep through the Python-owned internal HTTP boundary instead, start the internal API and
+use:
+
+```bash
+--target internal-http --api-base-url http://127.0.0.1:8088
+```
+
+The internal HTTP target posts the full worker command to `POST /internal/agent-runs` and records
+the returned worker event stream. This is the provider-owned service boundary TS should call after
+it resolves Runtime Profile and Agent Behavior Version acceptance.
+
+Code-level experiment planners include:
+
+- `ParameterSweepPlanner` for exhaustive local parameter matrices.
+- `OptunaStudyPlanner` for Optuna-compatible studies via `study.ask()` plus categorical, int, and
+  float distributions. When no Optuna study object is supplied, it generates deterministic local
+  candidates for tests and offline runtime comparisons.
+
+The gateway target is a migration convenience for comparing against the current product path. Do not
+extend it as Python runtime functionality; move or retire product-path measurement in favor of TS
+acceptance tests or dedicated observability/test engineering.
+
 Development sweeps use an incomplete ad hoc behavior identity by default. Comparable and published
 sweeps must provide complete behavior-version dimensions:
 
@@ -83,3 +121,17 @@ uv run python -m agent_runtime_python.experiment \
   --behavior-version model=model:deterministic-smoke \
   --behavior-version sourceRevision=0123456789abcdef0123456789abcdef01234567
 ```
+
+## Telemetry
+
+Runtime spans use bounded, protocol-safe metadata:
+
+- `agent.run` for one accepted worker command.
+- `agent.graph` for registered graph execution.
+- `agent.graph.node` for LangGraph node execution.
+- `experiment.study` and `experiment.trial` for provider-owned runtime experiments.
+
+Telemetry attributes include Agent Run id, runtime profile id, behavior-version dimensions, graph
+id, node name, experiment study/trial ids, experiment target, selected parameters, outcome, and
+worker error classification. Raw prompts, provider payloads, credentials, stack traces, and tool
+arguments must not be emitted across the TS boundary.

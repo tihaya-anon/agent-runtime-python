@@ -6,8 +6,11 @@ from io import StringIO
 from agent_runtime_python.experiment import (
     DirectWorkerTarget,
     ExperimentConfig,
+    InternalHttpStreamingTarget,
     JsonlResultRecorder,
     JsonScalar,
+    OptunaStudyPlanner,
+    ParameterDistribution,
     TsGatewayTarget,
     TargetRun,
     TrialPlanner,
@@ -230,6 +233,68 @@ class ExperimentTest(unittest.TestCase):
             record_trial_result(trial, target_run).agent_run_id, "ar_gateway"
         )
 
+    def test_internal_http_target_posts_worker_command_and_decodes_ndjson_events(
+        self,
+    ) -> None:
+        # Given
+        captured_requests = []
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def __iter__(self):
+                return iter(
+                    [
+                        b'{"version":1,"type":"run.started","agentRunId":"ar_http"}\n',
+                        b'{"version":1,"type":"message.delta","text":"HTTP response."}\n',
+                        b'{"version":1,"type":"run.completed"}\n',
+                    ],
+                )
+
+        def open_agent_run(request):
+            captured_requests.append(request)
+            return FakeResponse()
+
+        target = InternalHttpStreamingTarget(
+            "http://runtime.internal",
+            open_agent_run=open_agent_run,
+        )
+        trial = build_trial_plan(
+            ExperimentConfig(
+                message="Explain closures.",
+                parameter_matrix={"style": ["concise"]},
+            ),
+        )[0]
+
+        # When
+        target_run = target.run(trial)
+
+        # Then
+        self.assertEqual(
+            captured_requests[0].full_url,
+            "http://runtime.internal/internal/agent-runs",
+        )
+        self.assertEqual(json.loads(captured_requests[0].data), trial.command)
+        self.assertEqual(
+            captured_requests[0].headers["Accept"],
+            "application/x-ndjson",
+        )
+        self.assertEqual(
+            [event["type"] for event in target_run.events],
+            ["run.started", "message.delta", "run.completed"],
+        )
+        self.assertEqual(target_run.submitted_runtime_profile_id, "runtime-development")
+        self.assertEqual(
+            target_run.submitted_behavior_version,
+            trial.command["behaviorVersion"],
+        )
+
     def test_build_trial_plan_accepts_custom_planner_extension_point(self) -> None:
         # Given
         class FixedPlanner:
@@ -254,12 +319,139 @@ class ExperimentTest(unittest.TestCase):
         self.assertEqual(len(trials), 1)
         self.assertEqual(trials[0].parameters, {"candidate": "optuna-style"})
 
+    def test_optuna_study_planner_uses_optuna_trial_suggestions(self) -> None:
+        # Given
+        class FakeTrial:
+            def suggest_categorical(
+                self,
+                name: str,
+                choices: Sequence[JsonScalar],
+            ) -> JsonScalar:
+                self.categorical = (name, choices)
+                return "detailed"
+
+            def suggest_int(
+                self,
+                name: str,
+                low: int,
+                high: int,
+                step: int = 1,
+                log: bool = False,
+            ) -> int:
+                self.integer = (name, low, high, step, log)
+                return 2
+
+            def suggest_float(
+                self,
+                name: str,
+                low: float,
+                high: float,
+                step: float | None = None,
+                log: bool = False,
+            ) -> float:
+                self.floating = (name, low, high, step, log)
+                return 0.2
+
+        class FakeStudy:
+            def __init__(self) -> None:
+                self.trials: list[FakeTrial] = []
+
+            def ask(self) -> FakeTrial:
+                trial = FakeTrial()
+                self.trials.append(trial)
+                return trial
+
+        study = FakeStudy()
+        planner = OptunaStudyPlanner(
+            [
+                ParameterDistribution(
+                    name="style",
+                    kind="categorical",
+                    choices=["concise", "detailed"],
+                ),
+                ParameterDistribution(name="k", kind="int", low=1, high=3),
+                ParameterDistribution(
+                    name="temperature",
+                    kind="float",
+                    low=0.0,
+                    high=1.0,
+                ),
+            ],
+            trial_count=2,
+            study=study,
+        )
+
+        # When
+        trials = build_trial_plan(
+            ExperimentConfig(
+                message="Explain closures.",
+                parameter_matrix={},
+            ),
+            planner=planner,
+        )
+
+        # Then
+        self.assertEqual(len(trials), 2)
+        self.assertEqual(
+            trials[0].parameters,
+            {"style": "detailed", "k": 2, "temperature": 0.2},
+        )
+        self.assertEqual(len(study.trials), 2)
+
+    def test_optuna_study_planner_can_generate_local_candidates_without_optuna(
+        self,
+    ) -> None:
+        # Given
+        planner = OptunaStudyPlanner(
+            [
+                ParameterDistribution(
+                    name="style",
+                    kind="categorical",
+                    choices=["concise", "detailed"],
+                ),
+                ParameterDistribution(name="k", kind="int", low=1, high=3),
+                ParameterDistribution(
+                    name="temperature",
+                    kind="float",
+                    low=0.0,
+                    high=1.0,
+                ),
+            ],
+            trial_count=3,
+        )
+
+        # When
+        trials = build_trial_plan(
+            ExperimentConfig(
+                message="Explain closures.",
+                parameter_matrix={},
+            ),
+            planner=planner,
+        )
+
+        # Then
+        self.assertEqual(
+            [trial.parameters for trial in trials],
+            [
+                {"style": "concise", "k": 1, "temperature": 0.0},
+                {"style": "detailed", "k": 2, "temperature": 0.5},
+                {"style": "concise", "k": 3, "temperature": 1.0},
+            ],
+        )
+
     def test_create_target_selects_gateway_target(self) -> None:
         # Given / When
         target = create_target("ts-gateway", "http://localhost:3000")
 
         # Then
         self.assertIsInstance(target, TsGatewayTarget)
+
+    def test_create_target_selects_internal_http_target(self) -> None:
+        # Given / When
+        target = create_target("internal-http", "http://runtime.internal")
+
+        # Then
+        self.assertIsInstance(target, InternalHttpStreamingTarget)
 
 
 if __name__ == "__main__":

@@ -16,12 +16,14 @@ from agent_runtime_python.protocol import (
     EVENT_VALIDATOR,
     PROTOCOL_VERSION,
 )
+from agent_runtime_python.telemetry import AgentRunTelemetry
 from agent_runtime_python.worker import AgentRunWorker
 
 JsonScalar = str | int | float | bool
 ParameterMatrix = Mapping[str, Sequence[JsonScalar]]
 RuntimeProfileKind = Literal["development", "published"]
-TargetKind = Literal["direct-worker", "ts-gateway"]
+TargetKind = Literal["direct-worker", "internal-http", "ts-gateway"]
+ParameterDistributionKind = Literal["categorical", "int", "float"]
 
 BEHAVIOR_VERSION_DIMENSIONS = (
     "graph",
@@ -44,6 +46,17 @@ class ExperimentConfig:
     behavior_version: Mapping[str, str] | None = None
     comparable: bool = False
     study_id: str = "local-sweep"
+
+
+@dataclass(frozen=True)
+class ParameterDistribution:
+    name: str
+    kind: ParameterDistributionKind
+    choices: Sequence[JsonScalar] = ()
+    low: int | float | None = None
+    high: int | float | None = None
+    step: int | float | None = None
+    log: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,11 +97,87 @@ class TrialPlanner(Protocol):
         ...
 
 
+class OptunaTrialProtocol(Protocol):
+    def suggest_categorical(
+        self,
+        name: str,
+        choices: Sequence[JsonScalar],
+    ) -> JsonScalar:
+        """Suggest one categorical value from an Optuna trial."""
+        ...
+
+    def suggest_int(
+        self,
+        name: str,
+        low: int,
+        high: int,
+        step: int = 1,
+        log: bool = False,
+    ) -> int:
+        """Suggest one integer value from an Optuna trial."""
+        ...
+
+    def suggest_float(
+        self,
+        name: str,
+        low: float,
+        high: float,
+        step: float | None = None,
+        log: bool = False,
+    ) -> float:
+        """Suggest one floating-point value from an Optuna trial."""
+        ...
+
+
+class OptunaStudyProtocol(Protocol):
+    def ask(self) -> OptunaTrialProtocol:
+        """Allocate one Optuna trial."""
+        ...
+
+
 class ParameterSweepPlanner:
     def parameter_sets(
         self, config: ExperimentConfig
     ) -> Sequence[dict[str, JsonScalar]]:
         return _parameter_combinations(config.parameter_matrix)
+
+
+class OptunaStudyPlanner:
+    """Generate parameter sets from an Optuna-compatible study/search space."""
+
+    def __init__(
+        self,
+        search_space: Sequence[ParameterDistribution],
+        trial_count: int,
+        study: OptunaStudyProtocol | None = None,
+    ) -> None:
+        if trial_count < 1:
+            raise ValueError("Optuna study trial_count must be positive")
+        for distribution in search_space:
+            _validate_distribution(distribution)
+
+        self._search_space = tuple(search_space)
+        self._trial_count = trial_count
+        self._study = study
+
+    def parameter_sets(
+        self,
+        config: ExperimentConfig,
+    ) -> Sequence[dict[str, JsonScalar]]:
+        _ = config
+        return [self._parameter_set(index) for index in range(self._trial_count)]
+
+    def _parameter_set(self, index: int) -> dict[str, JsonScalar]:
+        trial = self._study.ask() if self._study is not None else None
+        return {
+            distribution.name: _suggest_parameter_value(
+                distribution,
+                index,
+                self._trial_count,
+                trial,
+            )
+            for distribution in self._search_space
+        }
 
 
 class ExperimentTarget(Protocol):
@@ -105,6 +194,34 @@ class DirectWorkerTarget:
         command = json.dumps(trial.command, separators=(",", ":"))
         return TargetRun(
             events=self._worker.handle_line(f"{command}\n"),
+            submitted_runtime_profile_id=str(
+                trial.command["runtimeProfile"]["profileId"]
+            ),
+            submitted_behavior_version=dict(trial.command["behaviorVersion"]),
+        )
+
+
+class InternalHttpStreamingTarget:
+    def __init__(
+        self,
+        api_base_url: str,
+        open_agent_run: Callable[[Request], Any] | None = None,
+    ) -> None:
+        self._api_base_url = api_base_url
+        self._open_agent_run = open_agent_run or urlopen
+
+    def run(self, trial: TrialPlan) -> TargetRun:
+        request = Request(
+            url=f"{self._api_base_url.rstrip('/')}/internal/agent-runs",
+            data=json.dumps(trial.command, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Accept": "application/x-ndjson",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        return TargetRun(
+            events=_read_ndjson_worker_events(request, self._open_agent_run),
             submitted_runtime_profile_id=str(
                 trial.command["runtimeProfile"]["profileId"]
             ),
@@ -130,24 +247,8 @@ class TsGatewayTarget:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        events = []
-        with self._open_agent_run(request) as response:
-            status = getattr(response, "status", 200)
-            if status >= 400:
-                raise RuntimeError(f"TS gateway returned HTTP {status}")
-
-            for raw_line in response:
-                line = (
-                    raw_line.decode("utf-8")
-                    if isinstance(raw_line, bytes)
-                    else str(raw_line)
-                )
-                event = json.loads(line)
-                EVENT_VALIDATOR.validate(event)
-                events.append(event)
-
         return TargetRun(
-            events=events,
+            events=_read_ndjson_worker_events(request, self._open_agent_run),
             submitted_runtime_profile_id=None,
             submitted_behavior_version=None,
         )
@@ -200,16 +301,26 @@ def run_experiment(
     target: ExperimentTarget | None = None,
     recorder: JsonlResultRecorder | None = None,
     planner: TrialPlanner | None = None,
+    telemetry: AgentRunTelemetry | None = None,
 ) -> list[TrialResult]:
     active_target = target or create_target(config.target)
+    active_telemetry = telemetry or AgentRunTelemetry()
     results = []
 
-    for trial in build_trial_plan(config, planner=planner):
-        target_run = active_target.run(trial)
-        result = record_trial_result(trial, target_run)
-        if recorder is not None:
-            recorder.record(result)
-        results.append(result)
+    with active_telemetry.start_experiment_study(config.study_id, config.target):
+        for trial in build_trial_plan(config, planner=planner):
+            with active_telemetry.start_experiment_trial(
+                config.study_id,
+                trial.trial_id,
+                config.target,
+                trial.parameters,
+            ) as span:
+                target_run = active_target.run(trial)
+                result = record_trial_result(trial, target_run)
+                active_telemetry.finish_experiment_trial(span, result.outcome)
+                if recorder is not None:
+                    recorder.record(result)
+                results.append(result)
 
     return results
 
@@ -255,6 +366,8 @@ def create_target(
 ) -> ExperimentTarget:
     if target == "direct-worker":
         return DirectWorkerTarget()
+    if target == "internal-http":
+        return InternalHttpStreamingTarget(api_base_url)
 
     return TsGatewayTarget(api_base_url)
 
@@ -275,7 +388,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--target",
-        choices=["direct-worker", "ts-gateway"],
+        choices=["direct-worker", "internal-http", "ts-gateway"],
         default="direct-worker",
     )
     parser.add_argument("--api-base-url", default="http://localhost:3000")
@@ -413,6 +526,76 @@ def _parameter_combinations(
     return combinations
 
 
+def _validate_distribution(distribution: ParameterDistribution) -> None:
+    if not distribution.name.strip():
+        raise ValueError("Parameter distribution names must not be empty")
+
+    if distribution.kind == "categorical":
+        if not distribution.choices:
+            raise ValueError(f"Parameter {distribution.name} must include choices")
+        return
+
+    if distribution.low is None or distribution.high is None:
+        raise ValueError(f"Parameter {distribution.name} must define low and high")
+    if distribution.low > distribution.high:
+        raise ValueError(f"Parameter {distribution.name} low must not exceed high")
+
+    if distribution.kind == "int" and not isinstance(distribution.low, int):
+        raise ValueError(f"Parameter {distribution.name} low must be an int")
+    if distribution.kind == "int" and not isinstance(distribution.high, int):
+        raise ValueError(f"Parameter {distribution.name} high must be an int")
+
+
+def _suggest_parameter_value(
+    distribution: ParameterDistribution,
+    trial_index: int,
+    trial_count: int,
+    trial: OptunaTrialProtocol | None,
+) -> JsonScalar:
+    if distribution.kind == "categorical":
+        if trial is not None:
+            return trial.suggest_categorical(distribution.name, distribution.choices)
+        return distribution.choices[trial_index % len(distribution.choices)]
+
+    if distribution.kind == "int":
+        low = _required_int(distribution.low)
+        high = _required_int(distribution.high)
+        step = int(distribution.step or 1)
+        if trial is not None:
+            return trial.suggest_int(
+                distribution.name, low, high, step, distribution.log
+            )
+        values = list(range(low, high + 1, step))
+        return values[trial_index % len(values)]
+
+    low = _required_float(distribution.low)
+    high = _required_float(distribution.high)
+    step = float(distribution.step) if distribution.step is not None else None
+    if trial is not None:
+        return trial.suggest_float(distribution.name, low, high, step, distribution.log)
+    if step is not None:
+        value_count = int((high - low) // step) + 1
+        return low + step * (trial_index % value_count)
+    if trial_count == 1:
+        return low + ((high - low) / 2)
+
+    return low + ((high - low) * trial_index / (trial_count - 1))
+
+
+def _required_int(value: int | float | None) -> int:
+    if not isinstance(value, int):
+        raise ValueError("Expected integer parameter distribution bound")
+
+    return value
+
+
+def _required_float(value: int | float | None) -> float:
+    if value is None:
+        raise ValueError("Expected numeric parameter distribution bound")
+
+    return float(value)
+
+
 def _trial_message(message: str, parameters: Mapping[str, JsonScalar]) -> str:
     if not parameters:
         return message
@@ -456,6 +639,31 @@ def _event_agent_run_id(events: Sequence[Mapping[str, Any]], fallback: str) -> s
                 return agent_run_id
 
     return fallback
+
+
+def _read_ndjson_worker_events(
+    request: Request,
+    open_agent_run: Callable[[Request], Any],
+) -> list[dict[str, Any]]:
+    events = []
+    with open_agent_run(request) as response:
+        status = getattr(response, "status", 200)
+        if status >= 400:
+            raise RuntimeError(f"Agent Run target returned HTTP {status}")
+
+        for raw_line in response:
+            line = (
+                raw_line.decode("utf-8")
+                if isinstance(raw_line, bytes)
+                else str(raw_line)
+            )
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            EVENT_VALIDATOR.validate(event)
+            events.append(event)
+
+    return events
 
 
 def _trial_result_to_record(result: TrialResult) -> dict[str, Any]:

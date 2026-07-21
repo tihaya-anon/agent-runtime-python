@@ -8,6 +8,8 @@ from agent_runtime_python.protocol import EVENT_VALIDATOR
 from agent_runtime_python.telemetry import (
     AGENT_BEHAVIOR_ATTRIBUTES,
     AGENT_RUN_ID_ATTRIBUTE,
+    GRAPH_ID_ATTRIBUTE,
+    GRAPH_NODE_NAME_ATTRIBUTE,
     RUNTIME_PROFILE_ID_ATTRIBUTE,
     agent_run_attributes,
 )
@@ -89,6 +91,26 @@ class WorkerTest(unittest.TestCase):
         )
         self.assertEqual(events[0]["agentRunId"], "ar_python_smoke")
         self.assertIn("Explain closures.", events[2]["text"])
+        self.assertEqual(events[1]["label"], "graph:python-smoke")
+        self.assertEqual(events[3]["label"], "graph:python-smoke")
+
+    def test_worker_rejects_unsupported_graph_before_execution(self) -> None:
+        # Given
+        command = json.loads(VALID_START_COMMAND)
+        command["behaviorVersion"]["graph"] = "graph:unknown"
+        worker = AgentRunWorker()
+
+        # When
+        events = worker.handle_line(json.dumps(command) + "\n")
+
+        # Then
+        for event in events:
+            EVENT_VALIDATOR.validate(event)
+        self.assertEqual(
+            [event["type"] for event in events],
+            ["run.started", "progress.update", "progress.update", "run.failed"],
+        )
+        self.assertEqual(events[-1]["errorClassification"], "validation")
 
     def test_worker_telemetry_attributes_align_with_ts_agent_run_names(self) -> None:
         # Given
@@ -106,6 +128,11 @@ class WorkerTest(unittest.TestCase):
             attributes[AGENT_BEHAVIOR_ATTRIBUTES["graph"]],
             "graph:python-smoke",
         )
+
+    def test_graph_telemetry_constants_have_bounded_attribute_names(self) -> None:
+        # Given / When / Then
+        self.assertEqual(GRAPH_ID_ATTRIBUTE, "metadata.agent_graph.id")
+        self.assertEqual(GRAPH_NODE_NAME_ATTRIBUTE, "metadata.agent_graph.node")
 
     def test_worker_reports_validation_failure_before_graph_execution(self) -> None:
         # Given
