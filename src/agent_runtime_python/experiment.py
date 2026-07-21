@@ -16,7 +16,10 @@ from agent_runtime_python.protocol import (
     EVENT_VALIDATOR,
     PROTOCOL_VERSION,
 )
-from agent_runtime_python.telemetry import AgentRunTelemetry
+from agent_runtime_python.telemetry import (
+    AgentRunTelemetry,
+    configure_telemetry_from_environment,
+)
 from agent_runtime_python.worker import AgentRunWorker
 
 JsonScalar = str | int | float | bool
@@ -373,6 +376,8 @@ def create_target(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    configure_telemetry_from_environment()
+
     parser = argparse.ArgumentParser(description="Run a local Agent Run trial sweep.")
     parser.add_argument("--message", default="Explain closures.")
     parser.add_argument(

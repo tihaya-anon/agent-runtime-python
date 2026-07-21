@@ -14,7 +14,10 @@ from agent_runtime_python.protocol import (
     parse_command_line,
     validation_failure_event,
 )
-from agent_runtime_python.telemetry import AgentRunTelemetry
+from agent_runtime_python.telemetry import (
+    AgentRunTelemetry,
+    configure_telemetry_from_environment,
+)
 
 
 class AgentRunWorker:
@@ -123,6 +126,7 @@ def main(
 ) -> int:
     """Run the worker over stdin/stdout NDJSON."""
 
+    configure_telemetry_from_environment()
     run_worker(input_stream or sys.stdin, output_stream or sys.stdout)
     return 0
 

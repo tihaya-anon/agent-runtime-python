@@ -245,7 +245,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service_name=\"agent-runtime-python\"} | json | __error__=\"\" | attributes_metadata_experiment_study_id=\"$study_id\"",
+          "expr": "{service_name=\"agent-runtime-python\"} | json | __error__=\"\" | agent_run_id=\"$agent_run_id\"",
           "queryType": "range",
           "refId": "A"
         }

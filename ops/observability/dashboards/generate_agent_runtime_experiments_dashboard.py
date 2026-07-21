@@ -306,7 +306,7 @@ def failed_runs_traceql() -> str:
 def correlated_logs_logql() -> str:
     return (
         f'{{service_name="{SERVICE_NAME}"}} | json | __error__="" '
-        f'| attributes_metadata_experiment_study_id="${STUDY_ID_VARIABLE}"'
+        f'| agent_run_id="${AGENT_RUN_ID_VARIABLE}"'
     )
 
 

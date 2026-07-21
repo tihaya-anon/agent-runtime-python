@@ -44,6 +44,18 @@ It accepts `POST /internal/agent-runs` with a complete `run.start` worker comman
 `application/x-ndjson` worker events. It also accepts
 `POST /internal/agent-runs/{agentRunId}/cancel` and returns a protocol `run.cancelled` event.
 
+## Container Runtime
+
+Build and run the internal API container:
+
+```bash
+docker compose -f compose.observability.yaml up --build
+```
+
+Start the PGL stack first so the external `observability` Docker network and Alloy service exist.
+The compose file attaches this container to that network, exports OTLP traces to
+`http://alloy:4318`, and writes JSON request logs to stdout for Loki ingestion.
+
 ## Protocol
 
 Canonical protocol source lives in `agent-workbench`:

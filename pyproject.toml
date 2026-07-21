@@ -9,10 +9,14 @@ description = "Python LangGraph runtime and experiment tooling for Agent Run wor
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.139.2",
     "jsonschema>=4.26.0",
     "langgraph>=1.2.9",
     "openinference-semantic-conventions>=0.1.30",
     "opentelemetry-api>=1.44.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
+    "uvicorn>=0.51.0",
 ]
 
 [project.scripts]

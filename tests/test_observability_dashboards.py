@@ -56,6 +56,11 @@ class ObservabilityDashboardTest(unittest.TestCase):
             variable["name"] for variable in dashboard["templating"]["list"]
         }
         queries = json.dumps(dashboard["panels"])
+        target_exprs = [
+            target.get("expr", "")
+            for panel in dashboard["panels"]
+            for target in panel.get("targets", [])
+        ]
 
         # Then
         self.assertEqual(dashboard["uid"], "agent-runtime-experiments")
@@ -80,6 +85,11 @@ class ObservabilityDashboardTest(unittest.TestCase):
         self.assertIn("metadata.agent_graph.id", queries)
         self.assertIn("graph.node.name", queries)
         self.assertIn("traces_spanmetrics_calls_total", queries)
+        self.assertIn(
+            '{service_name="agent-runtime-python"} | json | __error__="" | '
+            'agent_run_id="$agent_run_id"',
+            target_exprs,
+        )
 
 
 if __name__ == "__main__":

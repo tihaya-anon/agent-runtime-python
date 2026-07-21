@@ -1,0 +1,29 @@
+services:
+  agent-runtime-python:
+    build:
+      context: .
+    image: agent-runtime-python:local
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_SERVICE_NAME: agent-runtime-python
+      OTEL_TRACES_EXPORTER: otlp
+    ports:
+      - 127.0.0.1:8088:8088
+    networks:
+      - observability
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/healthz').read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  observability:
+    external: true

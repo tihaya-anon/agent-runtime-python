@@ -74,6 +74,27 @@ POST /internal/agent-runs/{agentRunId}/cancel
 The current adapter returns `run.cancelled`. Cleanup for long-running graph execution belongs in
 worker/runtime code as those graphs are added.
 
+## Container and PGL Ingestion
+
+Run the internal API as a container attached to the PGL stack:
+
+```bash
+docker compose -f compose.observability.yaml up --build
+```
+
+Start `../prometheus-grafana-loki` first so the external Docker network named `observability` and
+the Alloy service are available. The compose file:
+
+- Runs `agent-runtime-python-internal-api` on container port `8088`.
+- Publishes the service at `127.0.0.1:8088`.
+- Sets `OTEL_SERVICE_NAME=agent-runtime-python`.
+- Exports traces over OTLP/HTTP to `http://alloy:4318`.
+- Emits JSON request logs to stdout with `agent_run_id` when the route includes one.
+
+PGL ingests the container logs through Alloy's Docker log discovery because the container is attached
+to the `observability` network. Tempo receives traces through Alloy, and Tempo's span-metrics
+generator writes span metrics to Prometheus for the experiment dashboard.
+
 ## Local Parameter Sweeps
 
 Run an in-process deterministic sweep:
