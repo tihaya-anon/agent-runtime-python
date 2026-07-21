@@ -8,7 +8,7 @@ ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
+    UV_DEFAULT_INDEX="https://mirrors.cloud.tencent.com/pypi/simple/"
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
