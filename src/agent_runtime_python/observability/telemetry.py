@@ -8,7 +8,7 @@ from typing import Any
 
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
-from opentelemetry.trace import Span
+from opentelemetry.trace import Span, Status, StatusCode
 
 SERVICE_NAME = "agent-runtime-python"
 AGENT_RUN_ID_ATTRIBUTE = SpanAttributes.SESSION_ID
@@ -151,6 +151,7 @@ class AgentRunTelemetry:
 
     def finish_run(self, span: Span, terminal_event: dict[str, Any]) -> None:
         if terminal_event["type"] == "run.completed":
+            span.set_status(Status(StatusCode.OK))
             span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "succeeded")
             return
 
@@ -158,6 +159,7 @@ class AgentRunTelemetry:
             span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "cancelled")
             return
 
+        span.set_status(Status(StatusCode.ERROR))
         span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "failed")
         error_classification = terminal_event.get("errorClassification")
         if isinstance(error_classification, str):
@@ -166,4 +168,8 @@ class AgentRunTelemetry:
             )
 
     def finish_experiment_trial(self, span: Span, outcome: str) -> None:
+        if outcome == "failed":
+            span.set_status(Status(StatusCode.ERROR))
+        elif outcome == "succeeded":
+            span.set_status(Status(StatusCode.OK))
         span.set_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE, outcome)

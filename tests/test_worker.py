@@ -3,6 +3,8 @@ import unittest
 from io import StringIO
 from typing import Any
 
+from opentelemetry.trace import StatusCode
+
 from agent_runtime_python import __version__
 from agent_runtime_python.observability.telemetry import (
     AGENT_BEHAVIOR_ATTRIBUTES,
@@ -10,6 +12,7 @@ from agent_runtime_python.observability.telemetry import (
     GRAPH_ID_ATTRIBUTE,
     GRAPH_NODE_NAME_ATTRIBUTE,
     RUNTIME_PROFILE_ID_ATTRIBUTE,
+    AgentRunTelemetry,
     agent_run_attributes,
 )
 from agent_runtime_python.runtime.protocol import EVENT_VALIDATOR
@@ -134,6 +137,31 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(GRAPH_ID_ATTRIBUTE, "metadata.agent_graph.id")
         self.assertEqual(GRAPH_NODE_NAME_ATTRIBUTE, "graph.node.name")
 
+    def test_agent_run_telemetry_marks_completed_runs_ok(self) -> None:
+        # Given
+        span = RecordingSpan()
+        telemetry = AgentRunTelemetry()
+
+        # When
+        telemetry.finish_run(span, {"type": "run.completed"})
+
+        # Then
+        self.assertEqual(span.status.status_code, StatusCode.OK)
+
+    def test_agent_run_telemetry_marks_failed_runs_error(self) -> None:
+        # Given
+        span = RecordingSpan()
+        telemetry = AgentRunTelemetry()
+
+        # When
+        telemetry.finish_run(
+            span,
+            {"type": "run.failed", "errorClassification": "validation"},
+        )
+
+        # Then
+        self.assertEqual(span.status.status_code, StatusCode.ERROR)
+
     def test_worker_reports_validation_failure_before_graph_execution(self) -> None:
         # Given
         worker = AgentRunWorker()
@@ -172,6 +200,18 @@ class WorkerTest(unittest.TestCase):
         # Then
         self.assertEqual(events[0]["type"], "run.started")
         self.assertEqual(events[-1]["type"], "run.completed")
+
+
+class RecordingSpan:
+    def __init__(self) -> None:
+        self.attributes: dict[str, Any] = {}
+        self.status = None
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.attributes[key] = value
+
+    def set_status(self, status: Any) -> None:
+        self.status = status
 
 
 if __name__ == "__main__":

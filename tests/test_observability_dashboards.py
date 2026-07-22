@@ -46,7 +46,7 @@ class ObservabilityDashboardTest(unittest.TestCase):
         # Then
         self.assertEqual(actual, expected)
 
-    def test_agent_runtime_experiment_dashboard_has_detailed_panels(self) -> None:
+    def test_agent_runtime_experiment_dashboard_has_visual_summary_panels(self) -> None:
         # Given
         dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
 
@@ -61,35 +61,51 @@ class ObservabilityDashboardTest(unittest.TestCase):
             for panel in dashboard["panels"]
             for target in panel.get("targets", [])
         ]
+        target_queries = [
+            target.get("query", "")
+            for panel in dashboard["panels"]
+            for target in panel.get("targets", [])
+        ]
+        panel_types = [panel["type"] for panel in dashboard["panels"]]
 
         # Then
         self.assertEqual(dashboard["uid"], "agent-runtime-experiments")
         self.assertEqual(
             panel_titles,
             {
-                "Recent Experiment Trials",
-                "Trial Starts by Outcome",
-                "Agent Run Duration p95",
-                "Selected Trial Trace",
-                "Graph and Node Breakdown",
-                "Failed Runtime Runs",
-                "Correlated Runtime Logs",
+                "Trials / min",
+                "Failed Runs / min",
+                "Agent Run p95",
+                "Trial Error %",
+                "Trial Outcome Mix",
+                "Runtime Activity Mix",
+                "Agent Run Latency Distribution",
+                "Trial Starts / min",
+                "Duration p95",
+                "Recent Trial Drilldown",
             },
         )
+        self.assertEqual(panel_types.count("table"), 1)
+        self.assertIn("stat", panel_types)
+        self.assertIn("gauge", panel_types)
+        self.assertIn("piechart", panel_types)
+        self.assertIn("bargauge", panel_types)
+        self.assertIn("heatmap", panel_types)
+        self.assertIn("timeseries", panel_types)
         self.assertEqual(
             variable_names,
-            {"study_id", "trial_id", "graph_id", "agent_run_id"},
+            {"study_id", "trial_id", "agent_run_id"},
         )
         self.assertIn("metadata.experiment.study_id", queries)
         self.assertIn("metadata.experiment.trial_id", queries)
-        self.assertIn("metadata.agent_graph.id", queries)
-        self.assertIn("graph.node.name", queries)
+        self.assertIn("metadata.experiment.outcome", queries)
         self.assertIn("traces_spanmetrics_calls_total", queries)
-        self.assertIn(
-            '{service_name="agent-runtime-python"} | json | __error__="" | '
-            'agent_run_id="$agent_run_id"',
-            target_exprs,
-        )
+        self.assertIn("STATUS_CODE_ERROR", queries)
+        self.assertIn("succeeded", queries)
+        self.assertIn("failed", queries)
+        self.assertNotIn("loki", queries)
+        self.assertNotIn("graph_id", queries)
+        self.assertTrue(any("trace:id" in query for query in target_queries))
 
 
 if __name__ == "__main__":

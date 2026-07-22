@@ -280,14 +280,14 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status_code) (increase(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\"}[$__range]))",
+          "expr": "sum by (outcome) (label_replace(increase(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\",status_code=\"STATUS_CODE_OK\"}[$__range]), \"outcome\", \"succeeded\", \"status_code\", \".*\") or label_replace(increase(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\",status_code=\"STATUS_CODE_ERROR\"}[$__range]), \"outcome\", \"failed\", \"status_code\", \".*\"))",
           "instant": true,
-          "legendFormat": "{{status_code}}",
+          "legendFormat": "{{outcome}}",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Trial Status Mix",
+      "title": "Trial Outcome Mix",
       "transformations": [],
       "transparent": false,
       "type": "piechart"
@@ -434,8 +434,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status_code) (rate(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\"}[5m]) * 60)",
-          "legendFormat": "{{status_code}}",
+          "expr": "sum by (outcome) (label_replace(rate(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\",status_code=\"STATUS_CODE_OK\"}[5m]) * 60, \"outcome\", \"succeeded\", \"status_code\", \".*\") or label_replace(rate(traces_spanmetrics_calls_total{service=\"agent-runtime-python\",span_name=\"experiment.trial\",status_code=\"STATUS_CODE_ERROR\"}[5m]) * 60, \"outcome\", \"failed\", \"status_code\", \".*\"))",
+          "legendFormat": "{{outcome}}",
           "refId": "A"
         }
       ],

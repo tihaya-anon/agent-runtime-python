@@ -105,9 +105,9 @@ def build_dashboard() -> dict[str, Any]:
         .with_panel(
             pie_chart_panel(
                 5,
-                "Trial Status Mix",
+                "Trial Outcome Mix",
                 GridPos(h=8, w=8, x=0, y=4),
-                prometheus_query("A", trial_status_mix_promql(), "{{status_code}}"),
+                prometheus_query("A", trial_outcome_mix_promql(), "{{outcome}}"),
             )
         )
         .with_panel(
@@ -133,7 +133,7 @@ def build_dashboard() -> dict[str, Any]:
                 8,
                 "Trial Starts / min",
                 GridPos(h=8, w=12, x=0, y=12),
-                prometheus_query("A", trial_rate_promql(), "{{status_code}}"),
+                prometheus_query("A", trial_rate_promql(), "{{outcome}}"),
             )
         )
         .with_panel(
@@ -338,10 +338,11 @@ def recent_trials_traceql() -> str:
 
 def trial_rate_promql() -> str:
     return (
-        "sum by (status_code) "
-        f"(rate({SPANMETRICS_CALLS_TOTAL}"
-        f'{{service="{SERVICE_NAME}",span_name="{EXPERIMENT_TRIAL_SPAN}"}}'
-        f"[{SPANMETRICS_WINDOW}]) * 60)"
+        "sum by (outcome) ("
+        f"{span_status_outcome_promql(trial_rate_by_status_promql('STATUS_CODE_OK'), 'succeeded')} "
+        "or "
+        f"{span_status_outcome_promql(trial_rate_by_status_promql('STATUS_CODE_ERROR'), 'failed')}"
+        ")"
     )
 
 
@@ -377,12 +378,13 @@ def trial_error_ratio_promql() -> str:
     return f"100 * {errored} / clamp_min({total}, 0.001)"
 
 
-def trial_status_mix_promql() -> str:
+def trial_outcome_mix_promql() -> str:
     return (
-        "sum by (status_code) "
-        f"(increase({SPANMETRICS_CALLS_TOTAL}"
-        f'{{service="{SERVICE_NAME}",span_name="{EXPERIMENT_TRIAL_SPAN}"}}'
-        "[$__range]))"
+        "sum by (outcome) ("
+        f"{span_status_outcome_promql(trial_increase_by_status_promql('STATUS_CODE_OK'), 'succeeded')} "
+        "or "
+        f"{span_status_outcome_promql(trial_increase_by_status_promql('STATUS_CODE_ERROR'), 'failed')}"
+        ")"
     )
 
 
@@ -424,6 +426,28 @@ def agent_run_latency_distribution_promql() -> str:
         f'{{service="{SERVICE_NAME}",span_name="{AGENT_RUN_SPAN}"}}'
         f"[{SPANMETRICS_WINDOW}]))"
     )
+
+
+def trial_rate_by_status_promql(status_code: str) -> str:
+    return (
+        f"rate({SPANMETRICS_CALLS_TOTAL}"
+        f'{{service="{SERVICE_NAME}",span_name="{EXPERIMENT_TRIAL_SPAN}",'
+        f'status_code="{status_code}"}}'
+        f"[{SPANMETRICS_WINDOW}]) * 60"
+    )
+
+
+def trial_increase_by_status_promql(status_code: str) -> str:
+    return (
+        f"increase({SPANMETRICS_CALLS_TOTAL}"
+        f'{{service="{SERVICE_NAME}",span_name="{EXPERIMENT_TRIAL_SPAN}",'
+        f'status_code="{status_code}"}}'
+        "[$__range])"
+    )
+
+
+def span_status_outcome_promql(expr: str, outcome: str) -> str:
+    return f'label_replace({expr}, "outcome", "{outcome}", "status_code", ".*")'
 
 
 def select_fields(fields: list[str]) -> str:
