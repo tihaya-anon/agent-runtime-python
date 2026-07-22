@@ -89,7 +89,7 @@ def _build_trial(
 ) -> TrialPlan:
     trial_id = f"{config.study_id}-trial-{index:04d}"
     agent_run_id = f"ar_{identifier_token(trial_id)}"
-    command = build_run_start_command(config, agent_run_id, parameters)
+    command = build_run_start_command(config, agent_run_id, trial_id, parameters)
     COMMAND_VALIDATOR.validate(command)
     return TrialPlan(
         trial_id=trial_id,

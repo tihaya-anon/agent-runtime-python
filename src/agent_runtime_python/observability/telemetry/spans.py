@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from typing import Any
 
@@ -17,10 +18,16 @@ from agent_runtime_python.observability.telemetry.attributes import (
     EXPERIMENT_TRIAL_ID_ATTRIBUTE,
     GRAPH_ID_ATTRIBUTE,
     GRAPH_NODE_NAME_ATTRIBUTE,
+    MODEL_USAGE_ATTRIBUTE,
+    USAGE_SNAPSHOT_ATTRIBUTES_BY_FIELD,
     agent_run_attributes,
     model_call_attributes,
 )
 from agent_runtime_python.observability.telemetry.context import (
+    CURRENT_AGENT_RUN_ID,
+    CURRENT_EXPERIMENT_STUDY_ID,
+    CURRENT_EXPERIMENT_TARGET,
+    CURRENT_EXPERIMENT_TRIAL_ID,
     CURRENT_GRAPH_ID,
     CURRENT_GRAPH_NODE_NAME,
     CURRENT_USAGE_ACCUMULATOR,
@@ -38,6 +45,10 @@ class AgentRunTelemetry:
     @contextmanager
     def start_run(self, command: dict[str, Any]):
         usage_token = CURRENT_USAGE_ACCUMULATOR.set(UsageAccumulator())
+        agent_run_token = CURRENT_AGENT_RUN_ID.set(command["agentRunId"])
+        study_token, trial_token, target_token = self._set_run_experiment_context(
+            command
+        )
         try:
             with self._tracer.start_as_current_span(
                 "agent.run",
@@ -45,6 +56,10 @@ class AgentRunTelemetry:
             ) as span:
                 yield span
         finally:
+            CURRENT_EXPERIMENT_TARGET.reset(target_token)
+            CURRENT_EXPERIMENT_TRIAL_ID.reset(trial_token)
+            CURRENT_EXPERIMENT_STUDY_ID.reset(study_token)
+            CURRENT_AGENT_RUN_ID.reset(agent_run_token)
             CURRENT_USAGE_ACCUMULATOR.reset(usage_token)
 
     @contextmanager
@@ -74,11 +89,19 @@ class AgentRunTelemetry:
         for name, value in parameters.items():
             attributes[f"metadata.experiment.parameter.{name}"] = value
 
-        with self._tracer.start_as_current_span(
-            "experiment.trial",
-            attributes=attributes,
-        ) as span:
-            yield span
+        study_token = CURRENT_EXPERIMENT_STUDY_ID.set(study_id)
+        trial_token = CURRENT_EXPERIMENT_TRIAL_ID.set(trial_id)
+        target_token = CURRENT_EXPERIMENT_TARGET.set(target)
+        try:
+            with self._tracer.start_as_current_span(
+                "experiment.trial",
+                attributes=attributes,
+            ) as span:
+                yield span
+        finally:
+            CURRENT_EXPERIMENT_TARGET.reset(target_token)
+            CURRENT_EXPERIMENT_TRIAL_ID.reset(trial_token)
+            CURRENT_EXPERIMENT_STUDY_ID.reset(study_token)
 
     @contextmanager
     def start_graph(self, graph_id: str):
@@ -124,6 +147,10 @@ class AgentRunTelemetry:
     ):
         graph_id = CURRENT_GRAPH_ID.get()
         node_name = CURRENT_GRAPH_NODE_NAME.get()
+        agent_run_id = CURRENT_AGENT_RUN_ID.get()
+        study_id = CURRENT_EXPERIMENT_STUDY_ID.get()
+        trial_id = CURRENT_EXPERIMENT_TRIAL_ID.get()
+        target = CURRENT_EXPERIMENT_TARGET.get()
         with self._tracer.start_as_current_span(
             "gen_ai.inference.client",
             attributes=model_call_attributes(
@@ -133,6 +160,10 @@ class AgentRunTelemetry:
                 provider_finish_reason=provider_finish_reason,
                 finish_reason=finish_reason,
                 operation_name=operation_name,
+                agent_run_id=agent_run_id,
+                study_id=study_id,
+                trial_id=trial_id,
+                target=target,
                 graph_id=graph_id,
                 node_name=node_name,
             ),
@@ -161,17 +192,22 @@ class AgentRunTelemetry:
         return accumulator.snapshot_event()
 
     def finish_run(self, span: Span, terminal_event: dict[str, Any]) -> None:
+        self._record_run_experiment_attributes(span)
+        self._record_run_usage_snapshot_attributes(span)
         if terminal_event["type"] == "run.completed":
             span.set_status(Status(StatusCode.OK))
             span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "succeeded")
+            span.set_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE, "succeeded")
             return
 
         if terminal_event["type"] == "run.cancelled":
             span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "cancelled")
+            span.set_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE, "cancelled")
             return
 
         span.set_status(Status(StatusCode.ERROR))
         span.set_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE, "failed")
+        span.set_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE, "failed")
         error_classification = terminal_event.get("errorClassification")
         if isinstance(error_classification, str):
             span.set_attribute(
@@ -184,3 +220,48 @@ class AgentRunTelemetry:
         elif outcome == "succeeded":
             span.set_status(Status(StatusCode.OK))
         span.set_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE, outcome)
+
+    def _set_run_experiment_context(self, command: dict[str, Any]):
+        metadata = command.get("experimentMetadata")
+        if not isinstance(metadata, dict):
+            return (
+                CURRENT_EXPERIMENT_STUDY_ID.set(CURRENT_EXPERIMENT_STUDY_ID.get()),
+                CURRENT_EXPERIMENT_TRIAL_ID.set(CURRENT_EXPERIMENT_TRIAL_ID.get()),
+                CURRENT_EXPERIMENT_TARGET.set(CURRENT_EXPERIMENT_TARGET.get()),
+            )
+
+        return (
+            CURRENT_EXPERIMENT_STUDY_ID.set(str(metadata["studyId"])),
+            CURRENT_EXPERIMENT_TRIAL_ID.set(str(metadata["trialId"])),
+            CURRENT_EXPERIMENT_TARGET.set(str(metadata["target"])),
+        )
+
+    def _record_run_experiment_attributes(self, span: Span) -> None:
+        study_id = CURRENT_EXPERIMENT_STUDY_ID.get()
+        trial_id = CURRENT_EXPERIMENT_TRIAL_ID.get()
+        target = CURRENT_EXPERIMENT_TARGET.get()
+        if study_id:
+            span.set_attribute(EXPERIMENT_STUDY_ID_ATTRIBUTE, study_id)
+        if trial_id:
+            span.set_attribute(EXPERIMENT_TRIAL_ID_ATTRIBUTE, trial_id)
+        if target:
+            span.set_attribute(EXPERIMENT_TARGET_ATTRIBUTE, target)
+
+    def _record_run_usage_snapshot_attributes(self, span: Span) -> None:
+        snapshot = self.usage_snapshot_event()
+        if snapshot is None:
+            return
+
+        usage = snapshot["usage"]
+        if isinstance(usage, dict):
+            for field_name, value in usage.items():
+                if isinstance(value, int):
+                    attribute_name = USAGE_SNAPSHOT_ATTRIBUTES_BY_FIELD.get(field_name)
+                    if attribute_name is not None:
+                        span.set_attribute(attribute_name, value)
+        model_usage = snapshot["modelUsage"]
+        if isinstance(model_usage, list):
+            span.set_attribute(
+                MODEL_USAGE_ATTRIBUTE,
+                json.dumps(model_usage, separators=(",", ":"), sort_keys=True),
+            )

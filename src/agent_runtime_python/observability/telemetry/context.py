@@ -18,3 +18,19 @@ CURRENT_GRAPH_NODE_NAME: ContextVar[str | None] = ContextVar(
     "agent_runtime_graph_node_name",
     default=None,
 )
+CURRENT_AGENT_RUN_ID: ContextVar[str | None] = ContextVar(
+    "agent_runtime_agent_run_id",
+    default=None,
+)
+CURRENT_EXPERIMENT_STUDY_ID: ContextVar[str | None] = ContextVar(
+    "agent_runtime_experiment_study_id",
+    default=None,
+)
+CURRENT_EXPERIMENT_TRIAL_ID: ContextVar[str | None] = ContextVar(
+    "agent_runtime_experiment_trial_id",
+    default=None,
+)
+CURRENT_EXPERIMENT_TARGET: ContextVar[str | None] = ContextVar(
+    "agent_runtime_experiment_target",
+    default=None,
+)

@@ -27,7 +27,12 @@ from dashboard_queries import (
     agent_run_latency_distribution_promql,
     duration_p95_by_span_promql,
     failed_runs_per_min_promql,
-    recent_trials_traceql,
+    model_call_latency_p95_traceql,
+    provider_cache_creation_tokens_traceql,
+    provider_cache_read_tokens_traceql,
+    provider_usage_by_graph_node_traceql,
+    provider_usage_by_study_model_traceql,
+    recent_trial_usage_traceql,
     runtime_activity_mix_promql,
     trial_error_ratio_promql,
     trial_outcome_mix_promql,
@@ -65,6 +70,10 @@ def build_dashboard() -> dict[str, Any]:
         .with_panel(latency_heatmap_panel())
         .with_panel(rate_timeseries_panel())
         .with_panel(duration_timeseries_panel())
+        .with_panel(usage_by_study_model_panel())
+        .with_panel(usage_by_graph_node_panel())
+        .with_panel(provider_cache_tokens_panel())
+        .with_panel(model_call_latency_panel())
         .with_panel(drilldown_table_panel())
         .build()
     )
@@ -142,8 +151,45 @@ def drilldown_table_panel() -> TablePanel:
     return table_panel(
         10,
         "Recent Trial Drilldown",
+        GridPos(h=8, w=24, x=0, y=44),
+        tempo_query("A", recent_trial_usage_traceql(), 50),
+    )
+
+
+def usage_by_study_model_panel() -> BarGaugePanel:
+    return bar_gauge_tempo_panel(
+        11,
+        "Provider Usage by Study / Model",
         GridPos(h=8, w=24, x=0, y=20),
-        tempo_query("A", recent_trials_traceql(), 50),
+        tempo_query("A", provider_usage_by_study_model_traceql(), 100),
+    )
+
+
+def usage_by_graph_node_panel() -> BarGaugePanel:
+    return bar_gauge_tempo_panel(
+        12,
+        "Provider Usage by Graph Node",
+        GridPos(h=8, w=8, x=0, y=36),
+        tempo_query("A", provider_usage_by_graph_node_traceql(), 100),
+    )
+
+
+def provider_cache_tokens_panel() -> TimeseriesPanel:
+    return timeseries_tempo_panel(
+        13,
+        "Provider Cache Tokens",
+        GridPos(h=8, w=8, x=8, y=36),
+        tempo_query("A", provider_cache_read_tokens_traceql(), 100),
+        tempo_query("B", provider_cache_creation_tokens_traceql(), 100),
+    )
+
+
+def model_call_latency_panel() -> TimeseriesPanel:
+    return timeseries_tempo_panel(
+        14,
+        "Model Call Latency p95",
+        GridPos(h=8, w=8, x=16, y=36),
+        tempo_query("A", model_call_latency_p95_traceql(), 100),
     )
 
 
@@ -198,6 +244,15 @@ def bar_gauge_panel(
     )
 
 
+def bar_gauge_tempo_panel(
+    panel_id: int,
+    title: str,
+    grid_pos: GridPos,
+    query: TempoQuery,
+) -> BarGaugePanel:
+    return _panel(BarGaugePanel(), panel_id, title, grid_pos, TEMPO).with_target(query)
+
+
 def heatmap_panel(
     panel_id: int,
     title: str,
@@ -218,6 +273,19 @@ def timeseries_panel(
     return _panel(TimeseriesPanel(), panel_id, title, grid_pos, PROMETHEUS).with_target(
         query
     )
+
+
+def timeseries_tempo_panel(
+    panel_id: int,
+    title: str,
+    grid_pos: GridPos,
+    *queries: TempoQuery,
+) -> TimeseriesPanel:
+    panel = _panel(TimeseriesPanel(), panel_id, title, grid_pos, TEMPO)
+    for query in queries:
+        panel = panel.with_target(query)
+
+    return panel
 
 
 def tempo_query(ref_id: str, query: str, limit: int) -> TempoQuery:

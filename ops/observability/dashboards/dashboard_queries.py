@@ -9,6 +9,20 @@ from agent_runtime_python.observability.telemetry import (
     EXPERIMENT_STUDY_ID_ATTRIBUTE,
     EXPERIMENT_TARGET_ATTRIBUTE,
     EXPERIMENT_TRIAL_ID_ATTRIBUTE,
+    GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
+    GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE,
+    GEN_AI_REQUEST_MODEL_ATTRIBUTE,
+    GEN_AI_SYSTEM_ATTRIBUTE,
+    GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
+    GRAPH_ID_ATTRIBUTE,
+    GRAPH_NODE_NAME_ATTRIBUTE,
+    MODEL_USAGE_ATTRIBUTE,
+    USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_OUTPUT_TOKENS_ATTRIBUTE,
+    USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE,
+    USAGE_TOTAL_TOKENS_ATTRIBUTE,
 )
 
 SERVICE_NAME = "agent-runtime-python"
@@ -20,6 +34,7 @@ AGENT_GRAPH_NODE_SPAN = "agent.graph.node"
 AGENT_GRAPH_SPAN = "agent.graph"
 AGENT_RUN_SPAN = "agent.run"
 EXPERIMENT_TRIAL_SPAN = "experiment.trial"
+MODEL_CALL_SPAN = "gen_ai.inference.client"
 SPANMETRICS_CALLS_TOTAL = "traces_spanmetrics_calls_total"
 SPANMETRICS_LATENCY_BUCKET = "traces_spanmetrics_latency_bucket"
 SPANMETRICS_WINDOW = "5m"
@@ -43,6 +58,97 @@ def recent_trials_traceql() -> str:
     return (
         f'{{ resource.service.name = "{SERVICE_NAME}" '
         f'&& span:name = "{EXPERIMENT_TRIAL_SPAN}" '
+        f"&& {selected_filter(EXPERIMENT_STUDY_ID_ATTRIBUTE, STUDY_ID_VARIABLE)} "
+        f"&& {selected_filter(EXPERIMENT_TRIAL_ID_ATTRIBUTE, TRIAL_ID_VARIABLE)} "
+        f"&& {selected_filter(EXPERIMENT_OUTCOME_ATTRIBUTE, TRIAL_OUTCOME_VARIABLE)} "
+        f"&& {selected_filter(AGENT_RUN_ID_ATTRIBUTE, AGENT_RUN_ID_VARIABLE)} "
+        f"}} | {fields}"
+    )
+
+
+def provider_usage_by_study_model_traceql() -> str:
+    return sum_model_usage_traceql(
+        GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
+        [
+            EXPERIMENT_STUDY_ID_ATTRIBUTE,
+            GEN_AI_SYSTEM_ATTRIBUTE,
+            GEN_AI_REQUEST_MODEL_ATTRIBUTE,
+        ],
+    )
+
+
+def provider_usage_by_graph_node_traceql() -> str:
+    return sum_model_usage_traceql(
+        GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
+        [
+            GRAPH_ID_ATTRIBUTE,
+            GRAPH_NODE_NAME_ATTRIBUTE,
+            GEN_AI_REQUEST_MODEL_ATTRIBUTE,
+        ],
+    )
+
+
+def provider_cache_read_tokens_traceql() -> str:
+    return provider_cache_tokens_traceql(GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE)
+
+
+def provider_cache_creation_tokens_traceql() -> str:
+    return provider_cache_tokens_traceql(GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE)
+
+
+def provider_cache_tokens_traceql(attribute_name: str) -> str:
+    return sum_model_usage_traceql(
+        attribute_name,
+        [GEN_AI_SYSTEM_ATTRIBUTE, GEN_AI_REQUEST_MODEL_ATTRIBUTE],
+    )
+
+
+def sum_model_usage_traceql(
+    usage_attribute_name: str,
+    group_attribute_names: list[str],
+) -> str:
+    return (
+        f"{selected_model_calls_traceql(reported_usage_filter(usage_attribute_name))} "
+        f"| sum_over_time({span_attribute(usage_attribute_name)}) "
+        f"by ({', '.join(span_attribute(name) for name in group_attribute_names)})"
+    )
+
+
+def model_call_latency_p95_traceql() -> str:
+    return (
+        f"{selected_model_calls_traceql()} "
+        f"| quantile_over_time(span:duration, .95) "
+        f"by ({span_attribute(GEN_AI_REQUEST_MODEL_ATTRIBUTE)}, "
+        f"{span_attribute(GRAPH_NODE_NAME_ATTRIBUTE)})"
+    )
+
+
+def recent_trial_usage_traceql() -> str:
+    fields = select_fields(
+        [
+            "span:name",
+            "trace:id",
+            "span:id",
+            "span:duration",
+            "span:status",
+            span_attribute(EXPERIMENT_STUDY_ID_ATTRIBUTE),
+            span_attribute(EXPERIMENT_TRIAL_ID_ATTRIBUTE),
+            span_attribute(EXPERIMENT_TARGET_ATTRIBUTE),
+            span_attribute(EXPERIMENT_OUTCOME_ATTRIBUTE),
+            span_attribute(AGENT_RUN_ID_ATTRIBUTE),
+            span_attribute(AGENT_RUN_OUTCOME_ATTRIBUTE),
+            span_attribute(USAGE_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(USAGE_OUTPUT_TOKENS_ATTRIBUTE),
+            span_attribute(USAGE_TOTAL_TOKENS_ATTRIBUTE),
+            span_attribute(USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE),
+            span_attribute(MODEL_USAGE_ATTRIBUTE),
+        ]
+    )
+    return (
+        f'{{ resource.service.name = "{SERVICE_NAME}" '
+        f'&& span:name = "{AGENT_RUN_SPAN}" '
         f"&& {selected_filter(EXPERIMENT_STUDY_ID_ATTRIBUTE, STUDY_ID_VARIABLE)} "
         f"&& {selected_filter(EXPERIMENT_TRIAL_ID_ATTRIBUTE, TRIAL_ID_VARIABLE)} "
         f"&& {selected_filter(EXPERIMENT_OUTCOME_ATTRIBUTE, TRIAL_OUTCOME_VARIABLE)} "
@@ -143,6 +249,24 @@ def span_status_outcome_promql(expr: str, outcome: str) -> str:
 
 def select_fields(fields: list[str]) -> str:
     return f"select({', '.join(fields)})"
+
+
+def selected_model_calls_traceql(model_filter: str | None = None) -> str:
+    model_filters = [
+        f'resource.service.name = "{SERVICE_NAME}"',
+        f'span:name = "{MODEL_CALL_SPAN}"',
+        selected_filter(EXPERIMENT_STUDY_ID_ATTRIBUTE, STUDY_ID_VARIABLE),
+        selected_filter(EXPERIMENT_TRIAL_ID_ATTRIBUTE, TRIAL_ID_VARIABLE),
+        selected_filter(AGENT_RUN_ID_ATTRIBUTE, AGENT_RUN_ID_VARIABLE),
+    ]
+    if model_filter is not None:
+        model_filters.append(model_filter)
+
+    return f'{{ {" && ".join(model_filters)} }}'
+
+
+def reported_usage_filter(attribute_name: str) -> str:
+    return f"{span_attribute(attribute_name)} != nil"
 
 
 def runtime_span_regex() -> str:

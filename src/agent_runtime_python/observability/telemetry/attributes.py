@@ -35,6 +35,21 @@ GEN_AI_FINISH_REASONS_ATTRIBUTE = "gen_ai.response.finish_reasons"
 GEN_AI_PROVIDER_FINISH_REASON_ATTRIBUTE = (
     "metadata.gen_ai.response.provider_finish_reason"
 )
+USAGE_INPUT_TOKENS_ATTRIBUTE = "usage.inputTokens"
+USAGE_OUTPUT_TOKENS_ATTRIBUTE = "usage.outputTokens"
+USAGE_TOTAL_TOKENS_ATTRIBUTE = "usage.totalTokens"
+USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE = "usage.cachedInputTokens"
+USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE = "usage.cacheCreationInputTokens"
+USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE = "usage.reasoningOutputTokens"
+MODEL_USAGE_ATTRIBUTE = "modelUsage"
+USAGE_SNAPSHOT_ATTRIBUTES_BY_FIELD = {
+    "inputTokens": USAGE_INPUT_TOKENS_ATTRIBUTE,
+    "outputTokens": USAGE_OUTPUT_TOKENS_ATTRIBUTE,
+    "totalTokens": USAGE_TOTAL_TOKENS_ATTRIBUTE,
+    "cachedInputTokens": USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE,
+    "cacheCreationInputTokens": USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
+    "reasoningOutputTokens": USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE,
+}
 AGENT_BEHAVIOR_ATTRIBUTES = {
     "graph": "metadata.agent_behavior_version.graph",
     "state": "metadata.agent_behavior_version.state",
@@ -69,6 +84,10 @@ def model_call_attributes(
     provider_finish_reason: str | None = None,
     finish_reason: str | None = None,
     operation_name: str = "chat",
+    agent_run_id: str | None = None,
+    study_id: str | None = None,
+    trial_id: str | None = None,
+    target: str | None = None,
     graph_id: str | None = None,
     node_name: str | None = None,
 ) -> dict[str, str | int | tuple[str, ...]]:
@@ -107,6 +126,14 @@ def model_call_attributes(
         attributes[GEN_AI_PROVIDER_FINISH_REASON_ATTRIBUTE] = provider_finish_reason
     if normalized_finish_reason:
         attributes[GEN_AI_FINISH_REASONS_ATTRIBUTE] = (normalized_finish_reason,)
+    if agent_run_id:
+        attributes[AGENT_RUN_ID_ATTRIBUTE] = agent_run_id
+    if study_id:
+        attributes[EXPERIMENT_STUDY_ID_ATTRIBUTE] = study_id
+    if trial_id:
+        attributes[EXPERIMENT_TRIAL_ID_ATTRIBUTE] = trial_id
+    if target:
+        attributes[EXPERIMENT_TARGET_ATTRIBUTE] = target
     if graph_id:
         attributes[GRAPH_ID_ATTRIBUTE] = graph_id
     if node_name:

@@ -43,6 +43,14 @@ class ExperimentPlanningTest(unittest.TestCase):
             )
             self.assertIn("trialParameter", trial.command["behaviorVersion"])
             self.assertIn("Trial parameters:", trial.command["input"]["message"])
+            self.assertEqual(
+                trial.command["experimentMetadata"],
+                {
+                    "studyId": config.study_id,
+                    "trialId": trial.trial_id,
+                    "target": config.target,
+                },
+            )
 
     def test_published_trial_requires_complete_behavior_identity(self) -> None:
         config = ExperimentConfig(

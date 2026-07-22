@@ -56,6 +56,27 @@ class InternalApiTest(unittest.TestCase):
         self.assertEqual(events[0]["type"], "run.started")
         self.assertEqual(events[-1]["type"], "run.completed")
 
+    def test_internal_agent_runs_endpoint_accepts_experiment_metadata(
+        self,
+    ) -> None:
+        command = json.loads(VALID_START_COMMAND)
+        command["behaviorVersion"]["graph"] = "graph:python-smoke-usage"
+        command["experimentMetadata"] = {
+            "studyId": "study:usage",
+            "trialId": "study:usage-trial-0001",
+            "target": "internal-http",
+        }
+
+        response = self.client.post(
+            "/internal/agent-runs",
+            content=json.dumps(command),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = _decode_events(response.content)
+        self.assertIn("usage.snapshot", [event["type"] for event in events])
+        self.assertEqual(events[-1]["type"], "run.completed")
+
     def test_internal_cancel_endpoint_returns_worker_cancel_event(self) -> None:
         # Given / When
         response = self.client.post("/internal/agent-runs/ar_python_smoke/cancel")

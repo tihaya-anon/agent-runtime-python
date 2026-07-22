@@ -27,8 +27,12 @@ def add_tempo_table_types(dashboard: dict[str, Any]) -> dict[str, Any]:
             continue
 
         for target in panel.get("targets", []):
-            if _is_tempo_target(target):
+            if not _is_tempo_target(target):
+                continue
+            if panel.get("type") == "table":
                 target["tableType"] = "spans"
+            if _is_traceql_metrics_query(target):
+                target["metricsQueryType"] = "range"
 
     return dashboard
 
@@ -61,7 +65,7 @@ def _tune_panel(panel: dict[str, Any]) -> None:
     if panel_type == "heatmap":
         _tune_heatmap_panel(panel, field_defaults, targets)
     if panel_type == "timeseries":
-        _tune_timeseries_panel(panel, field_defaults)
+        _tune_timeseries_panel(panel, field_defaults, targets)
     if panel_type == "table":
         _tune_table_panel(panel, field_defaults)
     if panel_type != "heatmap":
@@ -161,7 +165,9 @@ def _tune_heatmap_panel(
 
 
 def _tune_timeseries_panel(
-    panel: dict[str, Any], field_defaults: dict[str, Any]
+    panel: dict[str, Any],
+    field_defaults: dict[str, Any],
+    targets: list[dict[str, Any]],
 ) -> None:
     panel["options"] = {
         "legend": {
@@ -172,7 +178,7 @@ def _tune_timeseries_panel(
         "tooltip": {"mode": "multi", "sort": "desc"},
     }
     field_defaults["decimals"] = 2
-    if panel.get("id") == 9:
+    if _uses_span_duration(targets):
         field_defaults["unit"] = "s"
 
 
@@ -289,3 +295,23 @@ def _is_tempo_target(target: object) -> bool:
 
     datasource = target.get("datasource")
     return isinstance(datasource, dict) and datasource.get("uid") == TEMPO.uid
+
+
+def _is_traceql_metrics_query(target: dict[str, Any]) -> bool:
+    query = target.get("query")
+    return isinstance(query, str) and any(
+        function_name in query
+        for function_name in ["sum_over_time(", "quantile_over_time("]
+    )
+
+
+def _uses_span_duration(targets: list[dict[str, Any]]) -> bool:
+    for target in targets:
+        query = target.get("query")
+        if isinstance(query, str) and "span:duration" in query:
+            return True
+        expr = target.get("expr")
+        if isinstance(expr, str) and "latency_bucket" in expr:
+            return True
+
+    return False

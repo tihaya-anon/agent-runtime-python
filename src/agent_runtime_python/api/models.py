@@ -74,6 +74,12 @@ class RuntimeProfile(ApiModel):
     runtime_policy: RuntimePolicy = Field(alias="runtimePolicy")
 
 
+class ExperimentMetadata(ApiModel):
+    study_id: str = Field(alias="studyId")
+    trial_id: str = Field(alias="trialId")
+    target: str
+
+
 class StartRunCommand(ApiModel):
     version: Literal[1]
     command_type: Literal["run.start"] = Field(alias="type")
@@ -81,6 +87,10 @@ class StartRunCommand(ApiModel):
     input: AgentRunInput
     runtime_profile: RuntimeProfile = Field(alias="runtimeProfile")
     behavior_version: dict[str, str] = Field(alias="behaviorVersion")
+    experiment_metadata: ExperimentMetadata | None = Field(
+        default=None,
+        alias="experimentMetadata",
+    )
 
     @field_validator("agent_run_id")
     @classmethod
@@ -91,4 +101,4 @@ class StartRunCommand(ApiModel):
         return value
 
     def to_worker_command(self) -> dict[str, Any]:
-        return dict(self.model_dump(by_alias=True))
+        return dict(self.model_dump(by_alias=True, exclude_none=True))

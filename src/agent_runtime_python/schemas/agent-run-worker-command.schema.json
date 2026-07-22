@@ -220,6 +220,26 @@
               "additionalProperties": false
             }
           ]
+        },
+        "experimentMetadata": {
+          "type": "object",
+          "properties": {
+            "studyId": {
+              "type": "string"
+            },
+            "trialId": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "studyId",
+            "trialId",
+            "target"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

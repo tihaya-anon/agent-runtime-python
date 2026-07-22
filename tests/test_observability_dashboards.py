@@ -124,6 +124,10 @@ class ObservabilityDashboardTest(unittest.TestCase):
                 "Agent Run Latency Distribution",
                 "Trial Starts / min",
                 "Duration p95",
+                "Provider Usage by Study / Model",
+                "Provider Usage by Graph Node",
+                "Provider Cache Tokens",
+                "Model Call Latency p95",
                 "Recent Trial Drilldown",
             },
         )
@@ -149,6 +153,73 @@ class ObservabilityDashboardTest(unittest.TestCase):
         self.assertNotIn("loki", queries)
         self.assertNotIn("graph_id", queries)
         self.assertTrue(any("trace:id" in query for query in target_queries))
+
+    def test_agent_runtime_experiment_dashboard_has_provider_usage_panels(self) -> None:
+        # Given
+        dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
+
+        # When
+        panel_titles = {panel["title"] for panel in dashboard["panels"]}
+        queries = json.dumps(dashboard["panels"])
+        target_queries = [
+            target.get("query", "")
+            for panel in dashboard["panels"]
+            for target in panel.get("targets", [])
+        ]
+
+        # Then
+        self.assertLessEqual(
+            {
+                "Provider Usage by Study / Model",
+                "Provider Usage by Graph Node",
+                "Provider Cache Tokens",
+                "Model Call Latency p95",
+                "Recent Trial Drilldown",
+            },
+            panel_titles,
+        )
+        for attribute_name in [
+            "gen_ai.inference.client",
+            "metadata.experiment.study_id",
+            "gen_ai.system",
+            "gen_ai.request.model",
+            "metadata.agent_graph.id",
+            "graph.node.name",
+            "gen_ai.usage.total_tokens",
+            "gen_ai.usage.cache_read.input_tokens",
+            "gen_ai.usage.cache_creation.input_tokens",
+            "usage.inputTokens",
+            "usage.outputTokens",
+            "usage.totalTokens",
+            "usage.cachedInputTokens",
+            "usage.cacheCreationInputTokens",
+            "usage.reasoningOutputTokens",
+            "modelUsage",
+        ]:
+            self.assertIn(attribute_name, queries)
+        self.assertTrue(
+            any(
+                "sum_over_time" in query
+                and "gen_ai.usage.total_tokens" in query
+                and "gen_ai.request.model" in query
+                for query in target_queries
+            )
+        )
+        self.assertTrue(
+            any(
+                "quantile_over_time(span:duration, .95)" in query
+                and "gen_ai.inference.client" in query
+                for query in target_queries
+            )
+        )
+        out_of_scope_surface = " ".join(
+            [
+                *(title.lower() for title in panel_titles),
+                *(query.lower() for query in target_queries),
+            ]
+        )
+        for forbidden in ["budget", "cost", "tool", "retrieval", "evaluator"]:
+            self.assertNotIn(forbidden, out_of_scope_surface)
 
     def test_agent_runtime_experiment_dashboard_links_trace_and_span_ids(self) -> None:
         # Given

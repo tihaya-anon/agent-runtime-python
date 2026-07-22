@@ -7,6 +7,10 @@ from opentelemetry.trace import StatusCode
 from agent_runtime_python.observability.telemetry import (
     AGENT_BEHAVIOR_ATTRIBUTES,
     AGENT_RUN_ID_ATTRIBUTE,
+    EXPERIMENT_OUTCOME_ATTRIBUTE,
+    EXPERIMENT_STUDY_ID_ATTRIBUTE,
+    EXPERIMENT_TARGET_ATTRIBUTE,
+    EXPERIMENT_TRIAL_ID_ATTRIBUTE,
     GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
     GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE,
     GEN_AI_FINISH_REASONS_ATTRIBUTE,
@@ -20,7 +24,14 @@ from agent_runtime_python.observability.telemetry import (
     GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
     GRAPH_ID_ATTRIBUTE,
     GRAPH_NODE_NAME_ATTRIBUTE,
+    MODEL_USAGE_ATTRIBUTE,
     RUNTIME_PROFILE_ID_ATTRIBUTE,
+    USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_INPUT_TOKENS_ATTRIBUTE,
+    USAGE_OUTPUT_TOKENS_ATTRIBUTE,
+    USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE,
+    USAGE_TOTAL_TOKENS_ATTRIBUTE,
     AgentRunTelemetry,
     agent_run_attributes,
 )
@@ -139,8 +150,80 @@ class WorkerTelemetryTest(unittest.TestCase):
             attributes[GEN_AI_PROVIDER_FINISH_REASON_ATTRIBUTE], "stop_sequence"
         )
         self.assertEqual(attributes[GEN_AI_FINISH_REASONS_ATTRIBUTE], ("stop",))
+        self.assertEqual(attributes[AGENT_RUN_ID_ATTRIBUTE], "ar_python_smoke")
         self.assertEqual(attributes[GRAPH_ID_ATTRIBUTE], "graph:custom")
         self.assertEqual(attributes[GRAPH_NODE_NAME_ATTRIBUTE], "draft_response")
+
+    def test_model_call_telemetry_inherits_experiment_context(self) -> None:
+        exporter = InMemorySpanExporter()
+        telemetry = AgentRunTelemetry(tracer_provider(exporter))
+
+        with telemetry.start_experiment_trial(
+            "study:usage",
+            "trial:usage",
+            "direct-worker",
+            {},
+        ):
+            with telemetry.start_run(json.loads(VALID_START_COMMAND)):
+                with telemetry.start_model_call(
+                    provider="synthetic",
+                    model="model:test",
+                    usage=ProviderUsage(input_tokens=1, output_tokens=2),
+                ):
+                    pass
+
+        attributes = model_span_attributes(exporter)
+        self.assertEqual(attributes[EXPERIMENT_STUDY_ID_ATTRIBUTE], "study:usage")
+        self.assertEqual(attributes[EXPERIMENT_TRIAL_ID_ATTRIBUTE], "trial:usage")
+        self.assertEqual(attributes[EXPERIMENT_TARGET_ATTRIBUTE], "direct-worker")
+        self.assertEqual(attributes[AGENT_RUN_ID_ATTRIBUTE], "ar_python_smoke")
+
+    def test_run_telemetry_records_usage_snapshot_fields_on_run_span(self) -> None:
+        exporter = InMemorySpanExporter()
+        telemetry = AgentRunTelemetry(tracer_provider(exporter))
+        command = json.loads(VALID_START_COMMAND)
+        command["experimentMetadata"] = {
+            "studyId": "study:usage",
+            "trialId": "trial:usage",
+            "target": "internal-http",
+        }
+
+        with telemetry.start_run(command) as span:
+            with telemetry.start_graph_node("graph:custom", "draft_response"):
+                with telemetry.start_model_call(
+                    provider="synthetic",
+                    model="model:test",
+                    usage=ProviderUsage(
+                        input_tokens=5,
+                        output_tokens=3,
+                        cached_input_tokens=2,
+                        cache_creation_input_tokens=1,
+                        reasoning_output_tokens=1,
+                    ),
+                ):
+                    pass
+            telemetry.finish_run(span, {"type": "run.completed"})
+
+        run_span = next(
+            span for span in exporter.get_finished_spans() if span.name == "agent.run"
+        )
+        attributes = run_span.attributes
+        assert attributes is not None
+        self.assertEqual(attributes[EXPERIMENT_STUDY_ID_ATTRIBUTE], "study:usage")
+        self.assertEqual(attributes[EXPERIMENT_TRIAL_ID_ATTRIBUTE], "trial:usage")
+        self.assertEqual(attributes[EXPERIMENT_TARGET_ATTRIBUTE], "internal-http")
+        self.assertEqual(attributes[EXPERIMENT_OUTCOME_ATTRIBUTE], "succeeded")
+        self.assertEqual(attributes[USAGE_INPUT_TOKENS_ATTRIBUTE], 5)
+        self.assertEqual(attributes[USAGE_OUTPUT_TOKENS_ATTRIBUTE], 3)
+        self.assertEqual(attributes[USAGE_TOTAL_TOKENS_ATTRIBUTE], 8)
+        self.assertEqual(attributes[USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE], 2)
+        self.assertEqual(attributes[USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE], 1)
+        self.assertEqual(attributes[USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE], 1)
+        model_usage = attributes[MODEL_USAGE_ATTRIBUTE]
+        self.assertIsInstance(model_usage, str)
+        assert isinstance(model_usage, str)
+        self.assertIn('"provider":"synthetic"', model_usage)
+        self.assertIn('"nodeName":"draft_response"', model_usage)
 
     def test_model_usage_snapshot_accumulates_and_groups_observed_usage(self) -> None:
         exporter = InMemorySpanExporter()

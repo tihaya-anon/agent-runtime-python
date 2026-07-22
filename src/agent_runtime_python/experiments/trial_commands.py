@@ -17,6 +17,7 @@ from agent_runtime_python.runtime.protocol import PROTOCOL_VERSION
 def build_run_start_command(
     config: ExperimentConfig,
     agent_run_id: str,
+    trial_id: str,
     parameters: dict[str, JsonScalar],
 ) -> dict[str, Any]:
     behavior_version = _build_behavior_version(
@@ -33,6 +34,11 @@ def build_run_start_command(
         "input": {"message": _trial_message(config.message, parameters)},
         "runtimeProfile": runtime_profile,
         "behaviorVersion": behavior_version,
+        "experimentMetadata": {
+            "studyId": config.study_id,
+            "trialId": trial_id,
+            "target": config.target,
+        },
     }
 
 
