@@ -37,6 +37,7 @@ TEMPO = DataSourceRef(type_val="tempo", uid="tempo")
 SERVICE_NAME = "agent-runtime-python"
 STUDY_ID_VARIABLE = "study_id"
 TRIAL_ID_VARIABLE = "trial_id"
+TRIAL_OUTCOME_VARIABLE = "trial_outcome"
 AGENT_RUN_ID_VARIABLE = "agent_run_id"
 AGENT_GRAPH_NODE_SPAN = "agent.graph.node"
 AGENT_GRAPH_SPAN = "agent.graph"
@@ -73,6 +74,7 @@ def build_dashboard() -> dict[str, Any]:
         .refresh("30s")
         .with_variable(text_variable(STUDY_ID_VARIABLE, "Study ID"))
         .with_variable(text_variable(TRIAL_ID_VARIABLE, "Trial ID"))
+        .with_variable(text_variable(TRIAL_OUTCOME_VARIABLE, "Trial Outcome"))
         .with_variable(text_variable(AGENT_RUN_ID_VARIABLE, "Agent Run ID"))
         .with_panel(
             stat_panel(
@@ -335,6 +337,7 @@ def recent_trials_traceql() -> str:
         f'&& span:name = "{EXPERIMENT_TRIAL_SPAN}" '
         f"&& {selected_filter(EXPERIMENT_STUDY_ID_ATTRIBUTE, STUDY_ID_VARIABLE)} "
         f"&& {selected_filter(EXPERIMENT_TRIAL_ID_ATTRIBUTE, TRIAL_ID_VARIABLE)} "
+        f"&& {selected_filter(EXPERIMENT_OUTCOME_ATTRIBUTE, TRIAL_OUTCOME_VARIABLE)} "
         f"&& {selected_filter(AGENT_RUN_ID_ATTRIBUTE, AGENT_RUN_ID_VARIABLE)} "
         f"}} | {fields}"
     )
@@ -544,6 +547,8 @@ def tune_panels(dashboard: dict[str, Any]) -> dict[str, Any]:
             }
             field_defaults["decimals"] = 0
             field_defaults["noValue"] = "0"
+            if panel_id == 5:
+                field_defaults["links"] = [trial_outcome_filter_link()]
 
         if panel_type == "bargauge":
             panel["options"] = {
@@ -677,6 +682,35 @@ def trace_explore_url(trace_link: dict[str, str]) -> str:
         encoded_panes = encoded_panes.replace(quote(variable), variable)
 
     return f"/explore?schemaVersion=1&panes={encoded_panes}"
+
+
+def trial_outcome_filter_link() -> dict[str, Any]:
+    return {
+        "title": "${__field.labels.outcome} trials",
+        "url": trial_outcome_filter_url(),
+        "targetBlank": False,
+    }
+
+
+def trial_outcome_filter_url() -> str:
+    params = {
+        "from": "${__from}",
+        "to": "${__to}",
+        f"var-{STUDY_ID_VARIABLE}": f"${STUDY_ID_VARIABLE}",
+        f"var-{TRIAL_ID_VARIABLE}": "",
+        f"var-{TRIAL_OUTCOME_VARIABLE}": "${__field.labels.outcome}",
+        f"var-{AGENT_RUN_ID_VARIABLE}": "",
+    }
+    query = "&".join(f"{name}={quote(value)}" for name, value in params.items())
+    for variable in [
+        "${__from}",
+        "${__to}",
+        f"${STUDY_ID_VARIABLE}",
+        "${__field.labels.outcome}",
+    ]:
+        query = query.replace(quote(variable), variable)
+
+    return f"/d/agent-runtime-experiments/agent-runtime-experiments?{query}"
 
 
 if __name__ == "__main__":

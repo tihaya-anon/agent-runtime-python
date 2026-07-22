@@ -69,6 +69,13 @@ def _field_link(panel: dict, field_name: str) -> dict:
     return link_property["value"][0]
 
 
+def _default_field_link(panel: dict) -> dict:
+    links = panel["fieldConfig"]["defaults"]["links"]
+    if not links:
+        raise AssertionError(f"Missing default field link: {panel['title']}")
+    return links[0]
+
+
 class ObservabilityDashboardTest(unittest.TestCase):
     def test_agent_runtime_experiment_dashboard_json_matches_generator(self) -> None:
         # Given
@@ -129,11 +136,12 @@ class ObservabilityDashboardTest(unittest.TestCase):
         self.assertIn("timeseries", panel_types)
         self.assertEqual(
             variable_names,
-            {"study_id", "trial_id", "agent_run_id"},
+            {"study_id", "trial_id", "trial_outcome", "agent_run_id"},
         )
         self.assertIn("metadata.experiment.study_id", queries)
         self.assertIn("metadata.experiment.trial_id", queries)
         self.assertIn("metadata.experiment.outcome", queries)
+        self.assertIn("$trial_outcome", queries)
         self.assertIn("traces_spanmetrics_calls_total", queries)
         self.assertIn("STATUS_CODE_ERROR", queries)
         self.assertIn("succeeded", queries)
@@ -161,6 +169,24 @@ class ObservabilityDashboardTest(unittest.TestCase):
             self.assertIn("${__from}", link["url"])
             self.assertIn("${__to}", link["url"])
             self.assertIn("/explore?schemaVersion=1&panes=", link["url"])
+
+    def test_trial_outcome_mix_filters_the_drilldown_table(self) -> None:
+        # Given
+        dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
+
+        # When
+        outcome_mix = _panel_by_title(dashboard, "Trial Outcome Mix")
+        outcome_link = _default_field_link(outcome_mix)
+
+        # Then
+        self.assertEqual(outcome_link["title"], "${__field.labels.outcome} trials")
+        self.assertFalse(outcome_link["targetBlank"])
+        self.assertIn(
+            "var-trial_outcome=${__field.labels.outcome}", outcome_link["url"]
+        )
+        self.assertIn("var-study_id=$study_id", outcome_link["url"])
+        self.assertIn("var-trial_id=", outcome_link["url"])
+        self.assertIn("var-agent_run_id=", outcome_link["url"])
 
 
 if __name__ == "__main__":
