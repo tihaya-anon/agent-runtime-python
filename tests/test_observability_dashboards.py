@@ -34,6 +34,41 @@ def _load_dashboard_module() -> ModuleType:
     return module
 
 
+def _panel_by_title(dashboard: dict, title: str) -> dict:
+    for panel in dashboard["panels"]:
+        if panel["title"] == title:
+            return panel
+    raise AssertionError(f"Missing dashboard panel: {title}")
+
+
+def _field_link(panel: dict, field_name: str) -> dict:
+    overrides = panel["fieldConfig"]["overrides"]
+    override = next(
+        (
+            candidate
+            for candidate in overrides
+            if candidate["matcher"]["options"] == field_name
+        ),
+        None,
+    )
+    if override is None:
+        raise AssertionError(f"Missing field override: {field_name}")
+
+    link_property = next(
+        (
+            property_value
+            for property_value in override["properties"]
+            if property_value["id"] == "links"
+            and isinstance(property_value["value"], list)
+        ),
+        None,
+    )
+    if link_property is None:
+        raise AssertionError(f"Missing field link: {field_name}")
+
+    return link_property["value"][0]
+
+
 class ObservabilityDashboardTest(unittest.TestCase):
     def test_agent_runtime_experiment_dashboard_json_matches_generator(self) -> None:
         # Given
@@ -106,6 +141,26 @@ class ObservabilityDashboardTest(unittest.TestCase):
         self.assertNotIn("loki", queries)
         self.assertNotIn("graph_id", queries)
         self.assertTrue(any("trace:id" in query for query in target_queries))
+
+    def test_agent_runtime_experiment_dashboard_links_trace_and_span_ids(self) -> None:
+        # Given
+        dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
+
+        # When
+        drilldown = _panel_by_title(dashboard, "Recent Trial Drilldown")
+        trace_link = _field_link(drilldown, "traceID")
+        span_link = _field_link(drilldown, "spanID")
+
+        # Then
+        self.assertIn("${__value.raw}", trace_link["url"])
+        self.assertIn("${__data.fields.traceIdHidden}", span_link["url"])
+        self.assertIn("${__value.raw}", span_link["url"])
+        for link in [trace_link, span_link]:
+            self.assertEqual(link["title"], "${__value.raw} ↗")
+            self.assertTrue(link["targetBlank"])
+            self.assertIn("${__from}", link["url"])
+            self.assertIn("${__to}", link["url"])
+            self.assertIn("/explore?schemaVersion=1&panes=", link["url"])
 
 
 if __name__ == "__main__":

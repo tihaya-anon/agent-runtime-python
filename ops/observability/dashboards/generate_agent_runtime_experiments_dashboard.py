@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from grafana_foundation_sdk.builders.bargauge import Panel as BarGaugePanel
 from grafana_foundation_sdk.builders.dashboard import Dashboard, TextBoxVariable
@@ -44,6 +45,9 @@ EXPERIMENT_TRIAL_SPAN = "experiment.trial"
 SPANMETRICS_CALLS_TOTAL = "traces_spanmetrics_calls_total"
 SPANMETRICS_LATENCY_BUCKET = "traces_spanmetrics_latency_bucket"
 SPANMETRICS_WINDOW = "5m"
+GRAFANA_FIELD_VALUE = "${__value.raw}"
+GRAFANA_TRACE_ID_FIELD = "${__data.fields.traceIdHidden}"
+GRAFANA_TIME_RANGE = {"from": "${__from}", "to": "${__to}"}
 
 
 def main() -> int:
@@ -584,7 +588,7 @@ def tune_panels(dashboard: dict[str, Any]) -> dict[str, Any]:
 
         if panel_type == "table":
             panel["description"] = (
-                "Use the returned trace IDs as the drilldown path into Tempo; "
+                "Use trace and span links as the drilldown path into Tempo; "
                 "filter logs in Grafana Explore by agent_run_id when needed."
             )
             panel["options"] = {
@@ -592,6 +596,22 @@ def tune_panels(dashboard: dict[str, Any]) -> dict[str, Any]:
                 "footer": {"show": False},
                 "showHeader": True,
             }
+            field_defaults["custom"] = {"align": "auto", "inspect": False}
+            panel.setdefault("fieldConfig", {}).setdefault("overrides", []).extend(
+                [
+                    field_link_override(
+                        "traceID",
+                        {"traceId": GRAFANA_FIELD_VALUE},
+                    ),
+                    field_link_override(
+                        "spanID",
+                        {
+                            "traceId": GRAFANA_TRACE_ID_FIELD,
+                            "spanId": GRAFANA_FIELD_VALUE,
+                        },
+                    ),
+                ]
+            )
 
         if panel_type != "heatmap":
             for target in targets:
@@ -602,6 +622,61 @@ def tune_panels(dashboard: dict[str, Any]) -> dict[str, Any]:
 
 def last_not_null_reduce_options() -> dict[str, Any]:
     return {"calcs": ["lastNotNull"], "fields": "", "values": False}
+
+
+def field_link_override(
+    field_name: str,
+    trace_link: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "matcher": {"id": "byName", "options": field_name},
+        "properties": [
+            {"id": "links", "value": None},
+            {"id": "custom.cellOptions", "value": {"type": "data-links"}},
+            {
+                "id": "links",
+                "value": [
+                    {
+                        "title": f"{GRAFANA_FIELD_VALUE} ↗",
+                        "url": trace_explore_url(trace_link),
+                        "targetBlank": True,
+                    }
+                ],
+            },
+        ],
+    }
+
+
+def trace_explore_url(trace_link: dict[str, str]) -> str:
+    pane: dict[str, Any] = {
+        "datasource": TEMPO.uid,
+        "queries": [
+            {
+                "query": trace_link["traceId"],
+                "queryType": "traceql",
+                "datasource": {"type": TEMPO.type_val, "uid": TEMPO.uid},
+                "refId": "A",
+                "limit": 20,
+                "tableType": "traces",
+                "metricsQueryType": "range",
+            }
+        ],
+        "range": GRAFANA_TIME_RANGE,
+        "compact": False,
+    }
+    span_id = trace_link.get("spanId")
+    if span_id is not None:
+        pane["panelsState"] = {"trace": {"spanId": span_id}}
+
+    encoded_panes = quote(json.dumps({"agentRunTrace": pane}, separators=(",", ":")))
+    for variable in [
+        GRAFANA_FIELD_VALUE,
+        GRAFANA_TRACE_ID_FIELD,
+        *GRAFANA_TIME_RANGE.values(),
+    ]:
+        encoded_panes = encoded_panes.replace(quote(variable), variable)
+
+    return f"/explore?schemaVersion=1&panes={encoded_panes}"
 
 
 if __name__ == "__main__":
