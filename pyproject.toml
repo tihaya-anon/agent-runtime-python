@@ -24,6 +24,7 @@ dependencies = [
 agent-runtime-python-worker = "agent_runtime_python.runtime.worker:main"
 agent-runtime-python-experiment = "agent_runtime_python.experiment:main"
 agent-runtime-python-internal-api = "agent_runtime_python.internal_api:main"
+agent-runtime-python-observability-smoke = "agent_runtime_python.observability.acceptance:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
