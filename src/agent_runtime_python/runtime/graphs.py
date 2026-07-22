@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from agent_runtime_python.observability.telemetry import AgentRunTelemetry
-from agent_runtime_python.runtime.smoke_graph import SMOKE_GRAPH_ID, run_smoke_graph
+from agent_runtime_python.runtime.smoke_graph import (
+    SMOKE_GRAPH_ID,
+    SMOKE_USAGE_FAILURE_GRAPH_ID,
+    SMOKE_USAGE_GRAPH_ID,
+    run_smoke_graph,
+    run_smoke_usage_failure_graph,
+    run_smoke_usage_graph,
+)
 
 GraphRunner = Callable[[str, AgentRunTelemetry | None], str]
 
@@ -16,6 +23,8 @@ class UnsupportedGraphError(ValueError):
 
 GRAPH_REGISTRY: Mapping[str, GraphRunner] = {
     SMOKE_GRAPH_ID: run_smoke_graph,
+    SMOKE_USAGE_GRAPH_ID: run_smoke_usage_graph,
+    SMOKE_USAGE_FAILURE_GRAPH_ID: run_smoke_usage_failure_graph,
 }
 
 

@@ -147,6 +147,56 @@ class ExperimentTest(unittest.TestCase):
             recorded["requestedBehaviorVersion"],
             recorded["submittedBehaviorVersion"],
         )
+        self.assertNotIn("usage", recorded)
+        self.assertNotIn("modelUsage", recorded)
+
+    def test_run_experiment_copies_final_usage_snapshot_to_jsonl(self) -> None:
+        # Given
+        output = StringIO()
+        config = ExperimentConfig(
+            message="Explain closures.",
+            parameter_matrix={"style": ["concise"]},
+            behavior_version={"graph": "graph:python-smoke-usage"},
+        )
+
+        # When
+        results = run_experiment(
+            config,
+            target=DirectWorkerTarget(),
+            recorder=JsonlResultRecorder(output),
+        )
+
+        # Then
+        self.assertEqual(results[0].outcome, "succeeded")
+        recorded = json.loads(output.getvalue())
+        self.assertEqual(
+            recorded["usage"],
+            {
+                "inputTokens": 11,
+                "outputTokens": 7,
+                "totalTokens": 18,
+                "cachedInputTokens": 3,
+                "cacheCreationInputTokens": 2,
+                "reasoningOutputTokens": 1,
+            },
+        )
+        self.assertEqual(
+            recorded["modelUsage"],
+            [
+                {
+                    "provider": "synthetic",
+                    "model": "model:deterministic-smoke",
+                    "graphId": "graph:python-smoke-usage",
+                    "nodeName": "draft_response",
+                    "inputTokens": 11,
+                    "outputTokens": 7,
+                    "totalTokens": 18,
+                    "cachedInputTokens": 3,
+                    "cacheCreationInputTokens": 2,
+                    "reasoningOutputTokens": 1,
+                },
+            ],
+        )
 
     def test_record_trial_result_captures_failed_terminal_outcome(self) -> None:
         # Given

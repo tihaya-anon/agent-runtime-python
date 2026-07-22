@@ -42,6 +42,7 @@ class AgentRunWorker:
 
         with self._telemetry.start_run(command) as span:
             events = self._run_agent(command)
+            events = self._with_usage_snapshot(events)
             self._telemetry.finish_run(span, events[-1])
             return events
 
@@ -59,6 +60,13 @@ class AgentRunWorker:
             return _failed_run_events(events, graph_id, "internal")
 
         return _completed_run_events(events, graph_id, response)
+
+    def _with_usage_snapshot(self, events: list[WorkerEvent]) -> list[WorkerEvent]:
+        usage_snapshot = self._telemetry.usage_snapshot_event()
+        if usage_snapshot is None:
+            return events
+
+        return [*events[:-1], usage_snapshot, events[-1]]
 
 
 def _started_run_events(agent_run_id: str, graph_id: str) -> list[WorkerEvent]:

@@ -85,6 +85,14 @@ class TrialResult:
     submitted_runtime_profile_id: str | None
     submitted_behavior_version: dict[str, str] | None
     error_classification: str | None = None
+    usage: dict[str, int] | None = None
+    model_usage: list[dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class UsageSnapshot:
+    usage: dict[str, int]
+    model_usage: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -309,6 +317,7 @@ def record_trial_result(trial: TrialPlan, target_run: TargetRun) -> TrialResult:
 
     terminal_event = events[-1]
     terminal_type = terminal_event.get("type")
+    usage_snapshot = _final_usage_snapshot(events)
 
     return TrialResult(
         trial_id=trial.trial_id,
@@ -322,6 +331,8 @@ def record_trial_result(trial: TrialPlan, target_run: TargetRun) -> TrialResult:
         submitted_runtime_profile_id=target_run.submitted_runtime_profile_id,
         submitted_behavior_version=target_run.submitted_behavior_version,
         error_classification=_optional_text(terminal_event.get("errorClassification")),
+        usage=usage_snapshot.usage if usage_snapshot is not None else None,
+        model_usage=usage_snapshot.model_usage if usage_snapshot is not None else None,
     )
 
 
@@ -760,8 +771,38 @@ def _trial_result_to_record(result: TrialResult) -> dict[str, Any]:
     }
     if result.error_classification is not None:
         record["errorClassification"] = result.error_classification
+    if result.usage is not None and result.model_usage is not None:
+        record["usage"] = result.usage
+        record["modelUsage"] = result.model_usage
 
     return record
+
+
+def _final_usage_snapshot(
+    events: Sequence[Mapping[str, Any]],
+) -> UsageSnapshot | None:
+    for event in reversed(events):
+        if event.get("type") != "usage.snapshot":
+            continue
+
+        usage = event.get("usage")
+        model_usage = event.get("modelUsage")
+        if not isinstance(usage, Mapping) or not isinstance(model_usage, list):
+            raise TypeError("usage.snapshot must include usage and modelUsage")
+
+        return UsageSnapshot(
+            usage=dict(cast(Mapping[str, int], usage)),
+            model_usage=[_mapping_record(row, "modelUsage row") for row in model_usage],
+        )
+
+    return None
+
+
+def _mapping_record(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{label} must be an object")
+
+    return dict(value)
 
 
 def _parse_parameter_matrix(entries: Sequence[str]) -> dict[str, list[JsonScalar]]:
