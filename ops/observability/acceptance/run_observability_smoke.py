@@ -278,7 +278,10 @@ def wait_for_telemetry(
         timeout_seconds=args.telemetry_timeout,
         probe=lambda: loki_has_log(
             args.loki_url,
-            f'{{service_name="agent-runtime-python"}} | json | agent_run_id="{success_identity.agent_run_id}"',
+            (
+                f'{{service_name="agent-runtime-python"}} | json '
+                f'| attributes_agent_run_id="{success_identity.agent_run_id}"'
+            ),
         ),
     )
     wait_for(
@@ -353,7 +356,6 @@ def print_dashboard_values(
     print("\nDashboard variable values:")
     print(f"study_id={first.study_id}")
     print(f"trial_id={first.trial_id}")
-    print(f"graph_id={GRAPH_ID}")
     print(f"agent_run_id={first.agent_run_id}")
     print(f"failed_agent_run_id={failure_identity.agent_run_id}")
     print(f"failed_study_id={failure_identity.study_id}")
