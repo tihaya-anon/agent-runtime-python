@@ -8,39 +8,19 @@ from typing import Any
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode, TracerProvider
 
-from agent_runtime_python.observability.telemetry_attributes import (
-    AGENT_BEHAVIOR_ATTRIBUTES,
+from agent_runtime_python.observability.telemetry.attributes import (
     AGENT_RUN_ERROR_CLASSIFICATION_ATTRIBUTE,
-    AGENT_RUN_ID_ATTRIBUTE,
     AGENT_RUN_OUTCOME_ATTRIBUTE,
     EXPERIMENT_OUTCOME_ATTRIBUTE,
     EXPERIMENT_STUDY_ID_ATTRIBUTE,
     EXPERIMENT_TARGET_ATTRIBUTE,
     EXPERIMENT_TRIAL_ID_ATTRIBUTE,
-    GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
-    GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE,
-    GEN_AI_FINISH_REASONS_ATTRIBUTE,
-    GEN_AI_INPUT_TOKENS_ATTRIBUTE,
-    GEN_AI_OPERATION_NAME_ATTRIBUTE,
-    GEN_AI_OUTPUT_TOKENS_ATTRIBUTE,
-    GEN_AI_PROVIDER_FINISH_REASON_ATTRIBUTE,
-    GEN_AI_REASONING_OUTPUT_TOKENS_ATTRIBUTE,
-    GEN_AI_REQUEST_MODEL_ATTRIBUTE,
-    GEN_AI_RESPONSE_MODEL_ATTRIBUTE,
-    GEN_AI_SYSTEM_ATTRIBUTE,
-    GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
     GRAPH_ID_ATTRIBUTE,
     GRAPH_NODE_NAME_ATTRIBUTE,
-    RUNTIME_PROFILE_ID_ATTRIBUTE,
-    SERVICE_NAME,
     agent_run_attributes,
     model_call_attributes,
-    normalize_finish_reason,
 )
-from agent_runtime_python.observability.telemetry_config import (
-    configure_telemetry_from_environment,
-)
-from agent_runtime_python.observability.telemetry_context import (
+from agent_runtime_python.observability.telemetry.context import (
     CURRENT_GRAPH_ID,
     CURRENT_GRAPH_NODE_NAME,
     CURRENT_USAGE_ACCUMULATOR,

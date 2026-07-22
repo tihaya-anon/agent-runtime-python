@@ -45,7 +45,7 @@ experiment.study
 
 Use the existing repo span names for the runtime-owned spine. Add OpenTelemetry GenAI or
 OpenInference attributes on AI child spans. If both conventions are emitted, centralize the mapping
-in `src/agent_runtime_python/observability/telemetry.py` so dashboards and tests do not duplicate
+in `src/agent_runtime_python/observability/telemetry/` so dashboards and tests do not duplicate
 provider-specific field logic.
 
 ## Recommended Metrics and Dashboard Panels

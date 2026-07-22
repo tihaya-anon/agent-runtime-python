@@ -25,7 +25,7 @@ These spans carry bounded, protocol-safe metadata such as Agent Run id, runtime 
 behavior-version dimensions, graph id, node name, experiment study/trial ids, target, parameters,
 outcome, and worker error classification. Raw prompts, provider payloads, credentials, stack traces,
 and tool arguments are intentionally excluded from boundary events and default span attributes.
-[Source: `src/agent_runtime_python/observability/telemetry.py`](../../src/agent_runtime_python/observability/telemetry.py)
+[Source: `src/agent_runtime_python/observability/telemetry/`](../../src/agent_runtime_python/observability/telemetry/)
 [Source: `docs/agents/runtime-usage.md`](../agents/runtime-usage.md)
 
 The current Grafana dashboard uses Tempo trace drilldown and Tempo span metrics in Prometheus for

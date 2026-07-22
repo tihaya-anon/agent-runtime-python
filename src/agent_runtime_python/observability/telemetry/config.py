@@ -6,7 +6,7 @@ import os
 
 from opentelemetry import trace
 
-from agent_runtime_python.observability.telemetry_attributes import SERVICE_NAME
+from agent_runtime_python.observability.telemetry.attributes import SERVICE_NAME
 
 _TELEMETRY_CONFIGURED = False
 
