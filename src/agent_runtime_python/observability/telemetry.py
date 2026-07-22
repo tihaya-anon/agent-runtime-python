@@ -8,7 +8,7 @@ from typing import Any
 
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
-from opentelemetry.trace import Span, Status, StatusCode
+from opentelemetry.trace import Span, Status, StatusCode, TracerProvider
 
 SERVICE_NAME = "agent-runtime-python"
 AGENT_RUN_ID_ATTRIBUTE = SpanAttributes.SESSION_ID
@@ -86,8 +86,11 @@ def agent_run_attributes(command: dict[str, Any]) -> dict[str, str]:
 
 
 class AgentRunTelemetry:
-    def __init__(self) -> None:
-        self._tracer = trace.get_tracer("agent_runtime_python.runtime.worker")
+    def __init__(self, tracer_provider: TracerProvider | None = None) -> None:
+        self._tracer = trace.get_tracer(
+            "agent_runtime_python.runtime.worker",
+            tracer_provider=tracer_provider,
+        )
 
     @contextmanager
     def start_run(self, command: dict[str, Any]):

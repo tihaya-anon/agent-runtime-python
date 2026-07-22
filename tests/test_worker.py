@@ -3,6 +3,9 @@ import unittest
 from io import StringIO
 from typing import Any
 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
 from agent_runtime_python import __version__
@@ -139,28 +142,32 @@ class WorkerTest(unittest.TestCase):
 
     def test_agent_run_telemetry_marks_completed_runs_ok(self) -> None:
         # Given
-        span = RecordingSpan()
-        telemetry = AgentRunTelemetry()
+        exporter = InMemorySpanExporter()
+        telemetry = AgentRunTelemetry(tracer_provider(exporter))
 
         # When
-        telemetry.finish_run(span, {"type": "run.completed"})
+        with telemetry.start_run(json.loads(VALID_START_COMMAND)) as span:
+            telemetry.finish_run(span, {"type": "run.completed"})
 
         # Then
-        self.assertEqual(span.status.status_code, StatusCode.OK)
+        finished_span = exporter.get_finished_spans()[0]
+        self.assertEqual(finished_span.status.status_code, StatusCode.OK)
 
     def test_agent_run_telemetry_marks_failed_runs_error(self) -> None:
         # Given
-        span = RecordingSpan()
-        telemetry = AgentRunTelemetry()
+        exporter = InMemorySpanExporter()
+        telemetry = AgentRunTelemetry(tracer_provider(exporter))
 
         # When
-        telemetry.finish_run(
-            span,
-            {"type": "run.failed", "errorClassification": "validation"},
-        )
+        with telemetry.start_run(json.loads(VALID_START_COMMAND)) as span:
+            telemetry.finish_run(
+                span,
+                {"type": "run.failed", "errorClassification": "validation"},
+            )
 
         # Then
-        self.assertEqual(span.status.status_code, StatusCode.ERROR)
+        finished_span = exporter.get_finished_spans()[0]
+        self.assertEqual(finished_span.status.status_code, StatusCode.ERROR)
 
     def test_worker_reports_validation_failure_before_graph_execution(self) -> None:
         # Given
@@ -202,16 +209,10 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(events[-1]["type"], "run.completed")
 
 
-class RecordingSpan:
-    def __init__(self) -> None:
-        self.attributes: dict[str, Any] = {}
-        self.status = None
-
-    def set_attribute(self, key: str, value: Any) -> None:
-        self.attributes[key] = value
-
-    def set_status(self, status: Any) -> None:
-        self.status = status
+def tracer_provider(exporter: InMemorySpanExporter) -> TracerProvider:
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return provider
 
 
 if __name__ == "__main__":
