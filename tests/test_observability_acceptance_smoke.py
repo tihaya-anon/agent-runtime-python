@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ACCEPTANCE_MODULE_PATH = (
     ROOT / "ops" / "observability" / "acceptance" / "run_observability_smoke.py"
 )
+PROVIDER_USAGE_ACCEPTANCE_MODULE_PATH = (
+    ROOT / "ops" / "observability" / "acceptance" / "run_provider_usage_acceptance.py"
+)
 
 
 def _load_acceptance_module() -> ModuleType:
@@ -21,6 +24,20 @@ def _load_acceptance_module() -> ModuleType:
 
     module = importlib.util.module_from_spec(spec)
     sys.modules["run_observability_smoke"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_provider_usage_acceptance_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "run_provider_usage_acceptance",
+        PROVIDER_USAGE_ACCEPTANCE_MODULE_PATH,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load provider usage acceptance module")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["run_provider_usage_acceptance"] = module
     spec.loader.exec_module(module)
     return module
 
@@ -135,6 +152,57 @@ class ObservabilityAcceptanceSmokeTest(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_provider_usage_acceptance_requires_usage_jsonl_record(self) -> None:
+        # Given
+        acceptance = _load_provider_usage_acceptance_module()
+        results_path = Path("/tmp/test-agent-runtime-provider-usage-results.jsonl")
+        results_path.write_text(
+            json.dumps(
+                {
+                    "trialId": "study-trial-0001",
+                    "agentRunId": "ar_study_trial_0001",
+                    "usage": acceptance.EXPECTED_USAGE,
+                    "modelUsage": [acceptance.EXPECTED_MODEL_USAGE],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        # When
+        record = acceptance.read_single_result(results_path)
+
+        # Then
+        acceptance.require_usage_record(record, results_path)
+
+    def test_provider_usage_acceptance_rejects_missing_usage_jsonl_record(
+        self,
+    ) -> None:
+        # Given
+        acceptance = _load_provider_usage_acceptance_module()
+
+        # When / Then
+        with self.assertRaises(acceptance.ObservabilitySmokeError):
+            acceptance.require_usage_record({}, Path("/tmp/missing-usage.jsonl"))
+
+    def test_provider_usage_acceptance_command_requests_usage_graph(self) -> None:
+        # Given
+        acceptance = _load_provider_usage_acceptance_module()
+
+        # When
+        command = acceptance.experiment_command(
+            python_executable="/venv/bin/python",
+            runtime_url="http://127.0.0.1:8088",
+            results_path=Path("/tmp/provider-usage.jsonl"),
+            study_id="provider-usage-test",
+            params=["promptStyle=concise"],
+            behavior_versions=[f"graph={acceptance.USAGE_GRAPH_ID}"],
+        )
+
+        # Then
+        self.assertIn("--behavior-version", command)
+        self.assertIn("graph=graph:python-smoke-usage", command)
+        self.assertIn("promptStyle=concise", command)
 
 
 if __name__ == "__main__":

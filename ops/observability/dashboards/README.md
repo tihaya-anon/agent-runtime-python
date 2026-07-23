@@ -47,3 +47,14 @@ network exist. The acceptance runner builds and starts `compose.observability.ya
 successful experiment plus one unsupported-graph failure through `POST /internal/agent-runs`, waits
 for telemetry to appear, and prints the `study_id`, `trial_id`, `graph_id`, successful
 `agent_run_id`, and `failed_agent_run_id` values to paste into the dashboard variables.
+
+To verify the current Provider Usage stage specifically, run the synthetic usage graph and assert
+that usage appears in both the JSONL trial result and PGL Tempo traces:
+
+```bash
+uv run python ops/observability/acceptance/run_provider_usage_acceptance.py
+```
+
+This writes `/tmp/agent-runtime-python-provider-usage-acceptance.jsonl` by default and fails unless
+the record includes `usage`/`modelUsage` and Tempo contains the corresponding `agent.run` and
+`gen_ai.inference.client` usage attributes.
