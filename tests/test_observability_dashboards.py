@@ -115,30 +115,30 @@ class ObservabilityDashboardTest(unittest.TestCase):
         self.assertEqual(
             panel_titles,
             {
-                "Trials / min",
-                "Failed Runs / min",
-                "Agent Run p95",
-                "Trial Error %",
-                "Trial Outcome Mix",
-                "Runtime Activity Mix",
-                "Agent Run Latency Distribution",
-                "Trial Starts / min",
-                "Duration p95",
-                "Provider Tokens by Model",
-                "Provider Tokens by Graph Node",
-                "Provider Cache Tokens",
-                "Model Call Latency p95",
-                "Recent Trial Drilldown",
+                "Trial throughput / min",
+                "Failed agent runs / min",
+                "Agent run duration p95",
+                "Trial error rate",
+                "Trial outcomes in selected range",
+                "Runtime activity by span",
+                "Agent run latency distribution",
+                "Trial starts by outcome / min",
+                "Runtime duration p95 by span",
+                "Provider tokens by model",
+                "Provider tokens by graph node",
+                "Provider cache tokens",
+                "Model call latency p95",
+                "Recent trial drilldown",
             },
         )
         self.assertEqual(panel_types.count("table"), 1)
         self.assertIn("stat", panel_types)
         self.assertIn("gauge", panel_types)
-        self.assertIn("piechart", panel_types)
         self.assertIn("barchart", panel_types)
-        self.assertIn("bargauge", panel_types)
         self.assertIn("heatmap", panel_types)
         self.assertIn("timeseries", panel_types)
+        self.assertNotIn("piechart", panel_types)
+        self.assertNotIn("bargauge", panel_types)
         self.assertEqual(
             variable_names,
             {"study_id", "trial_id", "trial_outcome", "agent_run_id"},
@@ -176,11 +176,11 @@ class ObservabilityDashboardTest(unittest.TestCase):
         # Then
         self.assertLessEqual(
             {
-                "Provider Tokens by Model",
-                "Provider Tokens by Graph Node",
-                "Provider Cache Tokens",
-                "Model Call Latency p95",
-                "Recent Trial Drilldown",
+                "Provider tokens by model",
+                "Provider tokens by graph node",
+                "Provider cache tokens",
+                "Model call latency p95",
+                "Recent trial drilldown",
             },
             panel_titles,
         )
@@ -219,9 +219,9 @@ class ObservabilityDashboardTest(unittest.TestCase):
             )
         )
         for title in [
-            "Provider Tokens by Model",
-            "Provider Tokens by Graph Node",
-            "Provider Cache Tokens",
+            "Provider tokens by model",
+            "Provider tokens by graph node",
+            "Provider cache tokens",
         ]:
             panel = _panel_by_title(dashboard, title)
             self.assertEqual(panel["type"], "barchart")
@@ -232,11 +232,11 @@ class ObservabilityDashboardTest(unittest.TestCase):
             self.assertIn("filterFieldsByName", transformations)
             self.assertNotIn("gen_ai.usage.total_tokens", transformations)
         self.assertEqual(
-            _panel_by_title(dashboard, "Model Call Latency p95")["type"],
+            _panel_by_title(dashboard, "Model call latency p95")["type"],
             "stat",
         )
         self.assertEqual(
-            _panel_by_title(dashboard, "Recent Trial Drilldown")["type"],
+            _panel_by_title(dashboard, "Recent trial drilldown")["type"],
             "table",
         )
         out_of_scope_surface = " ".join(
@@ -253,7 +253,7 @@ class ObservabilityDashboardTest(unittest.TestCase):
         dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
 
         # When
-        drilldown = _panel_by_title(dashboard, "Recent Trial Drilldown")
+        drilldown = _panel_by_title(dashboard, "Recent trial drilldown")
         trace_link = _field_link(drilldown, "traceID")
         span_link = _field_link(drilldown, "spanID")
 
@@ -273,18 +273,42 @@ class ObservabilityDashboardTest(unittest.TestCase):
         dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
 
         # When
-        outcome_mix = _panel_by_title(dashboard, "Trial Outcome Mix")
+        outcome_mix = _panel_by_title(dashboard, "Trial outcomes in selected range")
         outcome_link = _default_field_link(outcome_mix)
 
         # Then
-        self.assertEqual(outcome_link["title"], "${__field.labels.outcome} trials")
+        self.assertEqual(outcome_link["title"], "${__data.fields.outcome} trials")
         self.assertFalse(outcome_link["targetBlank"])
-        self.assertIn(
-            "var-trial_outcome=${__field.labels.outcome}", outcome_link["url"]
-        )
+        self.assertIn("var-trial_outcome=${__data.fields.outcome}", outcome_link["url"])
         self.assertIn("var-study_id=$study_id", outcome_link["url"])
         self.assertIn("var-trial_id=", outcome_link["url"])
         self.assertIn("var-agent_run_id=", outcome_link["url"])
+
+    def test_composition_panels_use_ranked_horizontal_bars(self) -> None:
+        # Given
+        dashboard = json.loads(DASHBOARD_JSON_PATH.read_text(encoding="utf-8"))
+
+        # When
+        outcome_mix = _panel_by_title(dashboard, "Trial outcomes in selected range")
+        activity_mix = _panel_by_title(dashboard, "Runtime activity by span")
+
+        # Then
+        for panel, x_field, axis_label in [
+            (outcome_mix, "outcome", "trials"),
+            (activity_mix, "span_name", "span count"),
+        ]:
+            self.assertEqual(panel["type"], "barchart")
+            self.assertEqual(panel["options"]["orientation"], "horizontal")
+            self.assertEqual(panel["options"]["showValue"], "always")
+            self.assertEqual(panel["options"]["stacking"], "none")
+            self.assertEqual(panel["options"]["xField"], x_field)
+            self.assertEqual(
+                panel["fieldConfig"]["defaults"]["custom"]["axisLabel"], axis_label
+            )
+            target = panel["targets"][0]
+            self.assertTrue(target["instant"])
+            self.assertEqual(target["format"], "table")
+            self.assertIn("sort_desc", target["expr"])
 
 
 if __name__ == "__main__":

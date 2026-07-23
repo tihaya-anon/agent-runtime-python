@@ -189,20 +189,20 @@ def trial_outcome_mix_promql() -> str:
     succeeded = trial_increase_by_status_promql("STATUS_CODE_OK")
     failed = trial_increase_by_status_promql("STATUS_CODE_ERROR")
     return (
-        "sum by (outcome) ("
+        "sort_desc(sum by (outcome) ("
         f"{span_status_outcome_promql(succeeded, 'succeeded')} "
         "or "
         f"{span_status_outcome_promql(failed, 'failed')}"
-        ")"
+        "))"
     )
 
 
 def runtime_activity_mix_promql() -> str:
     return (
-        "sum by (span_name) "
+        "sort_desc(sum by (span_name) "
         f"(increase({SPANMETRICS_CALLS_TOTAL}"
         f'{{service="{SERVICE_NAME}",span_name=~"{runtime_span_regex()}"}}'
-        "[$__range]))"
+        "[$__range])))"
     )
 
 

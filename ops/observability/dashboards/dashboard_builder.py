@@ -6,11 +6,9 @@ import json
 from typing import Any
 
 from grafana_foundation_sdk.builders.barchart import Panel as BarChartPanel
-from grafana_foundation_sdk.builders.bargauge import Panel as BarGaugePanel
 from grafana_foundation_sdk.builders.dashboard import Dashboard, TextBoxVariable
 from grafana_foundation_sdk.builders.gauge import Panel as GaugePanel
 from grafana_foundation_sdk.builders.heatmap import Panel as HeatmapPanel
-from grafana_foundation_sdk.builders.piechart import Panel as PieChartPanel
 from grafana_foundation_sdk.builders.prometheus import Dataquery as PrometheusQuery
 from grafana_foundation_sdk.builders.stat import Panel as StatPanel
 from grafana_foundation_sdk.builders.table import Panel as TablePanel
@@ -61,11 +59,17 @@ def build_dashboard() -> dict[str, Any]:
         .with_variable(text_variable(TRIAL_ID_VARIABLE, "Trial ID"))
         .with_variable(text_variable(TRIAL_OUTCOME_VARIABLE, "Trial Outcome"))
         .with_variable(text_variable(AGENT_RUN_ID_VARIABLE, "Agent Run ID"))
-        .with_panel(stat_card(1, "Trials / min", 0, trial_starts_per_min_promql()))
-        .with_panel(stat_card(2, "Failed Runs / min", 6, failed_runs_per_min_promql()))
-        .with_panel(stat_card(3, "Agent Run p95", 12, agent_run_duration_p95_promql()))
-        .with_panel(gauge_card(4, "Trial Error %", 18, trial_error_ratio_promql()))
-        .with_panel(mix_panel(5, "Trial Outcome Mix", 0, trial_outcome_mix_promql()))
+        .with_panel(
+            stat_card(1, "Trial throughput / min", 0, trial_starts_per_min_promql())
+        )
+        .with_panel(
+            stat_card(2, "Failed agent runs / min", 6, failed_runs_per_min_promql())
+        )
+        .with_panel(
+            stat_card(3, "Agent run duration p95", 12, agent_run_duration_p95_promql())
+        )
+        .with_panel(gauge_card(4, "Trial error rate", 18, trial_error_ratio_promql()))
+        .with_panel(outcome_panel())
         .with_panel(activity_panel())
         .with_panel(latency_heatmap_panel())
         .with_panel(rate_timeseries_panel())
@@ -102,19 +106,19 @@ def gauge_card(panel_id: int, title: str, x: int, expr: str) -> GaugePanel:
     )
 
 
-def mix_panel(panel_id: int, title: str, x: int, expr: str) -> PieChartPanel:
-    return pie_chart_panel(
-        panel_id,
-        title,
-        GridPos(h=8, w=8, x=x, y=4),
-        prometheus_query("A", expr, "{{outcome}}"),
+def outcome_panel() -> BarChartPanel:
+    return bar_chart_prometheus_panel(
+        5,
+        "Trial outcomes in selected range",
+        GridPos(h=8, w=8, x=0, y=4),
+        prometheus_query("A", trial_outcome_mix_promql(), "{{outcome}}"),
     )
 
 
-def activity_panel() -> BarGaugePanel:
-    return bar_gauge_panel(
+def activity_panel() -> BarChartPanel:
+    return bar_chart_prometheus_panel(
         6,
-        "Runtime Activity Mix",
+        "Runtime activity by span",
         GridPos(h=8, w=8, x=8, y=4),
         prometheus_query("A", runtime_activity_mix_promql(), "{{span_name}}"),
     )
@@ -123,7 +127,7 @@ def activity_panel() -> BarGaugePanel:
 def latency_heatmap_panel() -> HeatmapPanel:
     return heatmap_panel(
         7,
-        "Agent Run Latency Distribution",
+        "Agent run latency distribution",
         GridPos(h=8, w=8, x=16, y=4),
         prometheus_query("A", agent_run_latency_distribution_promql(), "{{le}}"),
     )
@@ -132,7 +136,7 @@ def latency_heatmap_panel() -> HeatmapPanel:
 def rate_timeseries_panel() -> TimeseriesPanel:
     return timeseries_panel(
         8,
-        "Trial Starts / min",
+        "Trial starts by outcome / min",
         GridPos(h=8, w=12, x=0, y=12),
         prometheus_query("A", trial_rate_promql(), "{{outcome}}"),
     )
@@ -141,7 +145,7 @@ def rate_timeseries_panel() -> TimeseriesPanel:
 def duration_timeseries_panel() -> TimeseriesPanel:
     return timeseries_panel(
         9,
-        "Duration p95",
+        "Runtime duration p95 by span",
         GridPos(h=8, w=12, x=12, y=12),
         prometheus_query("A", duration_p95_by_span_promql(), "{{span_name}}"),
     )
@@ -150,7 +154,7 @@ def duration_timeseries_panel() -> TimeseriesPanel:
 def drilldown_table_panel() -> TablePanel:
     return table_panel(
         10,
-        "Recent Trial Drilldown",
+        "Recent trial drilldown",
         GridPos(h=8, w=24, x=0, y=36),
         tempo_query("A", recent_trial_usage_traceql(), 50),
     )
@@ -159,7 +163,7 @@ def drilldown_table_panel() -> TablePanel:
 def usage_by_study_model_panel() -> BarChartPanel:
     return bar_chart_tempo_panel(
         11,
-        "Provider Tokens by Model",
+        "Provider tokens by model",
         GridPos(h=8, w=12, x=0, y=20),
         tempo_query("A", provider_usage_by_study_model_traceql(), 100),
     )
@@ -168,7 +172,7 @@ def usage_by_study_model_panel() -> BarChartPanel:
 def usage_by_graph_node_panel() -> BarChartPanel:
     return bar_chart_tempo_panel(
         12,
-        "Provider Tokens by Graph Node",
+        "Provider tokens by graph node",
         GridPos(h=8, w=12, x=12, y=20),
         tempo_query("A", provider_usage_by_graph_node_traceql(), 100),
     )
@@ -177,7 +181,7 @@ def usage_by_graph_node_panel() -> BarChartPanel:
 def provider_cache_tokens_panel() -> BarChartPanel:
     return bar_chart_tempo_panel(
         13,
-        "Provider Cache Tokens",
+        "Provider cache tokens",
         GridPos(h=8, w=12, x=0, y=28),
         tempo_query("A", provider_cache_tokens_traceql(), 100),
     )
@@ -186,7 +190,7 @@ def provider_cache_tokens_panel() -> BarChartPanel:
 def model_call_latency_panel() -> StatPanel:
     return stat_panel(
         14,
-        "Model Call Latency p95",
+        "Model call latency p95",
         GridPos(h=8, w=12, x=12, y=28),
         prometheus_query("A", model_call_latency_p95_promql(), "p95"),
     )
@@ -221,25 +225,14 @@ def gauge_panel(
     )
 
 
-def pie_chart_panel(
+def bar_chart_prometheus_panel(
     panel_id: int,
     title: str,
     grid_pos: GridPos,
     query: PrometheusQuery,
-) -> PieChartPanel:
-    return _panel(PieChartPanel(), panel_id, title, grid_pos, PROMETHEUS).with_target(
-        query.instant()
-    )
-
-
-def bar_gauge_panel(
-    panel_id: int,
-    title: str,
-    grid_pos: GridPos,
-    query: PrometheusQuery,
-) -> BarGaugePanel:
-    return _panel(BarGaugePanel(), panel_id, title, grid_pos, PROMETHEUS).with_target(
-        query.instant()
+) -> BarChartPanel:
+    return _panel(BarChartPanel(), panel_id, title, grid_pos, PROMETHEUS).with_target(
+        query.instant().format("table")
     )
 
 
@@ -328,7 +321,7 @@ def _panel(
 
 def _legend_for_stat(title: str) -> str:
     return {
-        "Trials / min": "trials/min",
-        "Failed Runs / min": "failed/min",
-        "Agent Run p95": "p95",
+        "Trial throughput / min": "trials/min",
+        "Failed agent runs / min": "failed/min",
+        "Agent run duration p95": "p95",
     }[title]

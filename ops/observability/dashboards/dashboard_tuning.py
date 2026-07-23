@@ -18,6 +18,7 @@ from dashboard_queries import (
 TEMPO = DataSourceRef(type_val="tempo", uid="tempo")
 GRAFANA_FIELD_VALUE = "${__value.raw}"
 GRAFANA_TRACE_ID_FIELD = "${__data.fields.traceIdHidden}"
+GRAFANA_OUTCOME_FIELD = "${__data.fields.outcome}"
 GRAFANA_TIME_RANGE = {"from": "${__from}", "to": "${__to}"}
 
 
@@ -58,10 +59,6 @@ def _tune_panel(panel: dict[str, Any]) -> None:
         _tune_stat_panel(panel, field_defaults)
     if panel_type == "gauge":
         _tune_gauge_panel(panel, field_defaults)
-    if panel_type == "piechart":
-        _tune_pie_chart_panel(panel, field_defaults)
-    if panel_type == "bargauge":
-        _tune_bar_gauge_panel(panel, field_defaults)
     if panel_type == "barchart":
         _tune_bar_chart_panel(panel, field_defaults)
     if panel_type == "heatmap":
@@ -70,7 +67,7 @@ def _tune_panel(panel: dict[str, Any]) -> None:
         _tune_timeseries_panel(panel, field_defaults, targets)
     if panel_type == "table":
         _tune_table_panel(panel, field_defaults)
-    if panel_type != "heatmap":
+    if panel_type != "heatmap" and not _keeps_target_format(panel):
         for target in targets:
             target.pop("format", None)
 
@@ -106,53 +103,18 @@ def _tune_gauge_panel(panel: dict[str, Any], field_defaults: dict[str, Any]) -> 
     field_defaults["thresholds"] = {
         "mode": "absolute",
         "steps": [
-            {"color": "green", "value": None},
-            {"color": "yellow", "value": 5},
+            {"color": "blue", "value": None},
+            {"color": "orange", "value": 5},
             {"color": "red", "value": 20},
         ],
     }
 
 
-def _tune_pie_chart_panel(
-    panel: dict[str, Any], field_defaults: dict[str, Any]
-) -> None:
-    panel["options"] = {
-        "displayLabels": ["name", "percent"],
-        "legend": {
-            "displayMode": "table",
-            "placement": "right",
-            "showLegend": True,
-            "values": ["value", "percent"],
-        },
-        "pieType": "donut",
-        "reduceOptions": last_not_null_reduce_options(),
-        "tooltip": {"mode": "multi", "sort": "none"},
-    }
-    field_defaults["decimals"] = 0
-    field_defaults["noValue"] = "0"
-    if panel.get("id") == 5:
-        field_defaults["links"] = [trial_outcome_filter_link()]
-
-
-def _tune_bar_gauge_panel(
-    panel: dict[str, Any], field_defaults: dict[str, Any]
-) -> None:
-    panel["options"] = {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": last_not_null_reduce_options(),
-        "showUnfilled": True,
-        "valueMode": "color",
-    }
-    field_defaults["decimals"] = 0
-    field_defaults["noValue"] = "0"
-
-
 def _tune_bar_chart_panel(
     panel: dict[str, Any], field_defaults: dict[str, Any]
 ) -> None:
-    x_field = _provider_usage_x_field(panel.get("id"))
-    if x_field is None:
+    chart_config = _bar_chart_config(panel.get("id"))
+    if chart_config is None:
         return
 
     panel["options"] = {
@@ -167,16 +129,16 @@ def _tune_bar_chart_panel(
         },
         "orientation": "horizontal",
         "showValue": "always",
-        "stacking": "normal",
+        "stacking": chart_config["stacking"],
         "tooltip": {"mode": "multi", "sort": "desc"},
-        "xField": x_field,
+        "xField": chart_config["x_field"],
         "xTickLabelMaxLength": 24,
         "xTickLabelRotation": 0,
         "xTickLabelSpacing": 0,
     }
     field_defaults["custom"] = {
         "axisGridShow": False,
-        "axisLabel": "tokens",
+        "axisLabel": chart_config["axis_label"],
         "axisPlacement": "auto",
         "fillOpacity": 72,
         "gradientMode": "none",
@@ -184,7 +146,9 @@ def _tune_bar_chart_panel(
     }
     field_defaults["decimals"] = 0
     field_defaults["noValue"] = "0"
-    field_defaults["unit"] = "short"
+    field_defaults["unit"] = chart_config["unit"]
+    if panel.get("id") == 5:
+        field_defaults["links"] = [trial_outcome_filter_link()]
     _filter_visual_usage_fields(panel)
 
 
@@ -304,7 +268,7 @@ def trace_explore_url(trace_link: dict[str, str]) -> str:
 
 def trial_outcome_filter_link() -> dict[str, Any]:
     return {
-        "title": "${__field.labels.outcome} trials",
+        "title": f"{GRAFANA_OUTCOME_FIELD} trials",
         "url": trial_outcome_filter_url(),
         "targetBlank": False,
     }
@@ -316,7 +280,7 @@ def trial_outcome_filter_url() -> str:
         "to": "${__to}",
         f"var-{STUDY_ID_VARIABLE}": f"${STUDY_ID_VARIABLE}",
         f"var-{TRIAL_ID_VARIABLE}": "",
-        f"var-{TRIAL_OUTCOME_VARIABLE}": "${__field.labels.outcome}",
+        f"var-{TRIAL_OUTCOME_VARIABLE}": GRAFANA_OUTCOME_FIELD,
         f"var-{AGENT_RUN_ID_VARIABLE}": "",
     }
     query = "&".join(f"{name}={quote(value)}" for name, value in params.items())
@@ -324,7 +288,7 @@ def trial_outcome_filter_url() -> str:
         "${__from}",
         "${__to}",
         f"${STUDY_ID_VARIABLE}",
-        "${__field.labels.outcome}",
+        GRAFANA_OUTCOME_FIELD,
     ]:
         query = query.replace(quote(variable), variable)
 
@@ -350,6 +314,10 @@ def _is_traceql_metrics_query(target: dict[str, Any]) -> bool:
 def _is_traceql_select_query(target: dict[str, Any]) -> bool:
     query = target.get("query")
     return isinstance(query, str) and " | select(" in query
+
+
+def _keeps_target_format(panel: dict[str, Any]) -> bool:
+    return panel.get("id") in {5, 6}
 
 
 def _filter_visual_usage_fields(panel: dict[str, Any]) -> None:
@@ -391,6 +359,41 @@ def _filter_visual_usage_fields(panel: dict[str, Any]) -> None:
             if field_name != _provider_usage_x_field(panel.get("id"))
         ]
     )
+
+
+def _bar_chart_config(panel_id: object) -> dict[str, str] | None:
+    return {
+        5: {
+            "axis_label": "trials",
+            "stacking": "none",
+            "unit": "short",
+            "x_field": "outcome",
+        },
+        6: {
+            "axis_label": "span count",
+            "stacking": "none",
+            "unit": "short",
+            "x_field": "span_name",
+        },
+        11: {
+            "axis_label": "tokens",
+            "stacking": "normal",
+            "unit": "short",
+            "x_field": "gen_ai.request.model",
+        },
+        12: {
+            "axis_label": "tokens",
+            "stacking": "normal",
+            "unit": "short",
+            "x_field": "graph.node.name",
+        },
+        13: {
+            "axis_label": "tokens",
+            "stacking": "normal",
+            "unit": "short",
+            "x_field": "gen_ai.request.model",
+        },
+    }.get(panel_id)
 
 
 def _provider_usage_x_field(panel_id: object) -> str | None:
