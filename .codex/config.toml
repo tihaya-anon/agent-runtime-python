@@ -42,6 +42,9 @@ approval_mode = "approve"
 [mcp_servers.playwright.tools.browser_navigate_back]
 approval_mode = "approve"
 
+[mcp_servers.playwright.tools.browser_run_code_unsafe]
+approval_mode = "approve"
+
 [mcp_servers.grafana]
 command = "uvx"
 args = ["mcp-grafana"]
@@ -53,6 +56,15 @@ GRAFANA_URL = "http://localhost:3000"
 UV_CACHE_DIR = "/tmp/.uv-cache"
 
 [mcp_servers.grafana.tools.grafana_api_request]
+approval_mode = "approve"
+
+[mcp_servers.grafana.tools.generate_deeplink]
+approval_mode = "approve"
+
+[mcp_servers.grafana.tools.create_folder]
+approval_mode = "approve"
+
+[mcp_servers.grafana.tools.update_dashboard]
 approval_mode = "approve"
 
 [mcp_servers.github]
