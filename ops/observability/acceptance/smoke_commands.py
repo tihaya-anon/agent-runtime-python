@@ -17,6 +17,40 @@ def compose_up_command(compose_file: Path) -> list[str]:
     return ["docker", "compose", "-f", str(compose_file), "up", "-d", "--build"]
 
 
+def compose_exec_command(
+    compose_file: Path,
+    service: str,
+    command: list[str],
+) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        service,
+        *command,
+    ]
+
+
+def compose_cp_command(
+    compose_file: Path,
+    service: str,
+    container_path: Path,
+    host_path: Path,
+) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "cp",
+        f"{service}:{container_path}",
+        str(host_path),
+    ]
+
+
 def experiment_command(
     python_executable: str,
     runtime_url: str,
@@ -24,6 +58,7 @@ def experiment_command(
     study_id: str,
     params: list[str],
     behavior_versions: list[str] | None = None,
+    message: str = "Observability acceptance smoke run.",
 ) -> list[str]:
     command = [
         python_executable,
@@ -36,7 +71,7 @@ def experiment_command(
         "--study-id",
         study_id,
         "--message",
-        "Observability acceptance smoke run.",
+        message,
         "--output",
         str(results_path),
     ]

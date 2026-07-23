@@ -16,6 +16,8 @@ if str(ACCEPTANCE_DIR) not in sys.path:
 import smoke_dashboard
 from smoke_commands import (
     ObservabilitySmokeError,
+    compose_cp_command,
+    compose_exec_command,
     compose_up_command,
     experiment_command,
     experiment_environment,
@@ -52,6 +54,8 @@ FAILED_GRAPH_ID = "graph:observability-smoke-unsupported"
 __all__ = [
     "ObservabilitySmokeError",
     "TrialIdentity",
+    "compose_cp_command",
+    "compose_exec_command",
     "compose_up_command",
     "experiment_command",
     "experiment_environment",

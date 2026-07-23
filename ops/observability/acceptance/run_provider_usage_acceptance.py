@@ -17,9 +17,10 @@ if str(ACCEPTANCE_DIR) not in sys.path:
 
 from smoke_commands import (
     ObservabilitySmokeError,
+    compose_cp_command,
+    compose_exec_command,
     compose_up_command,
     experiment_command,
-    experiment_environment,
     run_command,
 )
 from smoke_results import TrialIdentity, read_trial_identities
@@ -32,11 +33,12 @@ from smoke_telemetry import (
 
 ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_FILE = ROOT / "compose.observability.yaml"
-DEFAULT_RESULTS_PATH = Path("/tmp/agent-runtime-python-provider-usage-acceptance.jsonl")
+DEFAULT_RESULTS_PATH = Path("/tmp/agent-runtime-python-provider-usage-smoke.jsonl")
 DEFAULT_RUNTIME_URL = "http://127.0.0.1:8088"
-DEFAULT_OTLP_ENDPOINT = "http://127.0.0.1:4318"
 DEFAULT_TEMPO_URL = "http://127.0.0.1:3200"
 DEFAULT_PROMETHEUS_URL = "http://127.0.0.1:9090"
+DEFAULT_CONTAINER_SERVICE = "agent-runtime-python"
+DEFAULT_CONTAINER_RESULTS_DIR = Path("/tmp")
 USAGE_GRAPH_ID = "graph:python-smoke-usage"
 USAGE_NODE_NAME = "draft_response"
 EXPECTED_USAGE = {
@@ -63,17 +65,10 @@ def main(argv: list[str] | None = None) -> int:
     run_command(compose_up_command(args.compose_file))
     wait_for_http(f"{args.runtime_url.rstrip('/')}/healthz", args.startup_timeout)
 
-    run_command(
-        experiment_command(
-            python_executable=sys.executable,
-            runtime_url=args.runtime_url,
-            results_path=args.results_path,
-            study_id=study_id,
-            params=["promptStyle=concise"],
-            behavior_versions=[f"graph={USAGE_GRAPH_ID}"],
-        ),
-        env=experiment_environment(args.otlp_endpoint),
-    )
+    args.results_path.parent.mkdir(parents=True, exist_ok=True)
+    container_results_path = container_result_path(args)
+    run_provider_usage_experiment(args, study_id, container_results_path)
+    copy_container_results(args, container_results_path)
 
     record = read_single_result(args.results_path)
     require_usage_record(record, args.results_path)
@@ -92,9 +87,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--compose-file", type=Path, default=COMPOSE_FILE)
     parser.add_argument("--runtime-url", default=DEFAULT_RUNTIME_URL)
-    parser.add_argument("--otlp-endpoint", default=DEFAULT_OTLP_ENDPOINT)
     parser.add_argument("--tempo-url", default=DEFAULT_TEMPO_URL)
     parser.add_argument("--prometheus-url", default=DEFAULT_PROMETHEUS_URL)
+    parser.add_argument("--container-service", default=DEFAULT_CONTAINER_SERVICE)
+    parser.add_argument(
+        "--container-results-dir",
+        type=Path,
+        default=DEFAULT_CONTAINER_RESULTS_DIR,
+    )
     parser.add_argument("--results-path", type=Path, default=DEFAULT_RESULTS_PATH)
     parser.add_argument(
         "--study-id",
@@ -106,7 +106,44 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def timestamped_study_id() -> str:
-    return f"provider-usage-acceptance-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
+    return f"provider-usage-smoke-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
+
+
+def container_result_path(args: argparse.Namespace) -> Path:
+    return args.container_results_dir / args.results_path.name
+
+
+def run_provider_usage_experiment(
+    args: argparse.Namespace,
+    study_id: str,
+    container_results_path: Path,
+) -> None:
+    command = experiment_command(
+        python_executable="python",
+        runtime_url=args.runtime_url,
+        results_path=container_results_path,
+        study_id=study_id,
+        params=["promptStyle=concise"],
+        behavior_versions=[f"graph={USAGE_GRAPH_ID}"],
+        message="Provider usage smoke run.",
+    )
+    run_command(
+        compose_exec_command(args.compose_file, args.container_service, command),
+    )
+
+
+def copy_container_results(
+    args: argparse.Namespace,
+    container_results_path: Path,
+) -> None:
+    run_command(
+        compose_cp_command(
+            args.compose_file,
+            args.container_service,
+            container_results_path,
+            args.results_path,
+        )
+    )
 
 
 def read_single_result(results_path: Path) -> dict[str, Any]:
@@ -196,8 +233,8 @@ def wait_for_provider_usage_traces(
 
 
 def print_acceptance_values(results_path: Path, identity: TrialIdentity) -> None:
-    print("\nProvider Usage acceptance values:")
-    print(f"results_path={results_path}")
+    print("\nProvider usage smoke values:")
+    print(f"results_jsonl={results_path}")
     print(f"study_id={identity.study_id}")
     print(f"trial_id={identity.trial_id}")
     print(f"agent_run_id={identity.agent_run_id}")

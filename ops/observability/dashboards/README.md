@@ -48,13 +48,13 @@ successful experiment plus one unsupported-graph failure through `POST /internal
 for telemetry to appear, and prints the `study_id`, `trial_id`, `graph_id`, successful
 `agent_run_id`, and `failed_agent_run_id` values to paste into the dashboard variables.
 
-To verify the current Provider Usage stage specifically, run the synthetic usage graph and assert
-that usage appears in both the JSONL trial result and PGL Tempo traces:
+To verify the current Provider Usage stage specifically, run the synthetic usage graph inside the
+runtime container and assert that usage appears in both the JSONL trial result and PGL telemetry:
 
 ```bash
-uv run python ops/observability/acceptance/run_provider_usage_acceptance.py
+uv run agent-runtime-python-provider-usage-smoke
 ```
 
-This writes `/tmp/agent-runtime-python-provider-usage-acceptance.jsonl` by default and fails unless
-the record includes `usage`/`modelUsage` and Tempo contains the corresponding `agent.run` and
-`gen_ai.inference.client` usage attributes.
+This writes `/tmp/agent-runtime-python-provider-usage-smoke.jsonl` by default and fails unless the
+record includes `usage`/`modelUsage`, Tempo contains the corresponding `agent.run` and
+`gen_ai.inference.client` usage attributes, and Prometheus has a model-call latency p95 sample.

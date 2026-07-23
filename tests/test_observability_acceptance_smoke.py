@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -12,6 +13,7 @@ ACCEPTANCE_MODULE_PATH = (
 PROVIDER_USAGE_ACCEPTANCE_MODULE_PATH = (
     ROOT / "ops" / "observability" / "acceptance" / "run_provider_usage_acceptance.py"
 )
+PYPROJECT_PATH = ROOT / "pyproject.toml"
 
 
 def _load_acceptance_module() -> ModuleType:
@@ -62,6 +64,62 @@ class ObservabilityAcceptanceSmokeTest(unittest.TestCase):
                 "up",
                 "-d",
                 "--build",
+            ],
+        )
+
+    def test_compose_exec_command_runs_inside_runtime_container(self) -> None:
+        # Given
+        acceptance = _load_acceptance_module()
+        compose_file = ROOT / "compose.observability.yaml"
+
+        # When
+        command = acceptance.compose_exec_command(
+            compose_file,
+            "agent-runtime-python",
+            ["python", "-m", "agent_runtime_python.experiment"],
+        )
+
+        # Then
+        self.assertEqual(
+            command,
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(compose_file),
+                "exec",
+                "-T",
+                "agent-runtime-python",
+                "python",
+                "-m",
+                "agent_runtime_python.experiment",
+            ],
+        )
+
+    def test_compose_cp_command_copies_container_result_to_host(self) -> None:
+        # Given
+        acceptance = _load_acceptance_module()
+        compose_file = ROOT / "compose.observability.yaml"
+
+        # When
+        command = acceptance.compose_cp_command(
+            compose_file,
+            "agent-runtime-python",
+            Path("/tmp/provider-usage.jsonl"),
+            Path("/tmp/provider-usage.jsonl"),
+        )
+
+        # Then
+        self.assertEqual(
+            command,
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(compose_file),
+                "cp",
+                "agent-runtime-python:/tmp/provider-usage.jsonl",
+                "/tmp/provider-usage.jsonl",
             ],
         )
 
@@ -203,6 +261,56 @@ class ObservabilityAcceptanceSmokeTest(unittest.TestCase):
         self.assertIn("--behavior-version", command)
         self.assertIn("graph=graph:python-smoke-usage", command)
         self.assertIn("promptStyle=concise", command)
+
+    def test_provider_usage_acceptance_runs_experiment_in_container(self) -> None:
+        # Given
+        acceptance = _load_provider_usage_acceptance_module()
+        args = acceptance.parse_args(
+            [
+                "--compose-file",
+                str(ROOT / "compose.observability.yaml"),
+                "--results-path",
+                "/tmp/readable-provider-usage.jsonl",
+            ]
+        )
+
+        # When
+        container_path = acceptance.container_result_path(args)
+        command = acceptance.compose_exec_command(
+            args.compose_file,
+            args.container_service,
+            acceptance.experiment_command(
+                python_executable="python",
+                runtime_url=args.runtime_url,
+                results_path=container_path,
+                study_id="provider-usage-smoke-test",
+                params=["promptStyle=concise"],
+                behavior_versions=[f"graph={acceptance.USAGE_GRAPH_ID}"],
+                message="Provider usage smoke run.",
+            ),
+        )
+
+        # Then
+        self.assertIn("exec", command)
+        self.assertIn("-T", command)
+        self.assertIn("agent-runtime-python", command)
+        self.assertIn("python", command)
+        self.assertIn("/tmp/readable-provider-usage.jsonl", command)
+        self.assertIn("provider-usage-smoke-test", command)
+        self.assertIn("Provider usage smoke run.", command)
+
+    def test_pyproject_exposes_provider_usage_smoke_script(self) -> None:
+        # Given
+        pyproject = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
+
+        # When
+        scripts = pyproject["project"]["scripts"]
+
+        # Then
+        self.assertEqual(
+            scripts["agent-runtime-python-provider-usage-smoke"],
+            "agent_runtime_python.observability.provider_usage_smoke:main",
+        )
 
 
 if __name__ == "__main__":
