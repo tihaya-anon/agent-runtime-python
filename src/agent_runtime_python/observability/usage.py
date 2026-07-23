@@ -16,17 +16,21 @@ class ProviderUsage:
     cached_input_tokens: int | None = None
     cache_creation_input_tokens: int | None = None
     reasoning_output_tokens: int | None = None
-    estimate_total: InitVar[bool] = True
-    _estimate_total: bool = field(init=False, repr=False, compare=False)
+    estimate_missing_total_tokens: InitVar[bool] = True
+    _estimate_missing_total_tokens: bool = field(init=False, repr=False, compare=False)
 
-    def __post_init__(self, estimate_total: bool) -> None:
-        object.__setattr__(self, "_estimate_total", estimate_total)
+    def __post_init__(self, estimate_missing_total_tokens: bool) -> None:
+        object.__setattr__(
+            self,
+            "_estimate_missing_total_tokens",
+            estimate_missing_total_tokens,
+        )
         for value in _usage_values(self):
             if value is not None and value < 0:
                 raise ValueError("Provider Usage token counts must not be negative")
 
         if (
-            estimate_total
+            estimate_missing_total_tokens
             and self.total_tokens is None
             and self.input_tokens is not None
             and self.output_tokens is not None
@@ -40,6 +44,27 @@ class ProviderUsage:
     @classmethod
     def empty(cls) -> "ProviderUsage":
         return cls()
+
+    @classmethod
+    def from_provider_report(
+        cls,
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        total_tokens: int | None = None,
+        cached_input_tokens: int | None = None,
+        cache_creation_input_tokens: int | None = None,
+        reasoning_output_tokens: int | None = None,
+    ) -> "ProviderUsage":
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            cached_input_tokens=cached_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            reasoning_output_tokens=reasoning_output_tokens,
+            estimate_missing_total_tokens=False,
+        )
 
     def is_empty(self) -> bool:
         return all(value is None for value in _usage_values(self))
@@ -61,7 +86,10 @@ class ProviderUsage:
                 self.reasoning_output_tokens,
                 other.reasoning_output_tokens,
             ),
-            estimate_total=self._estimate_total and other._estimate_total,
+            estimate_missing_total_tokens=(
+                self._estimate_missing_total_tokens
+                and other._estimate_missing_total_tokens
+            ),
         )
 
     def to_record(self) -> dict[str, int]:

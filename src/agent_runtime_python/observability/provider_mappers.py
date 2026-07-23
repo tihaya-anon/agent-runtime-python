@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_runtime_python.observability.telemetry.attributes import (
-    PROVIDER_TOOL_CALL_FINISH_REASONS,
     normalize_finish_reason,
 )
 from agent_runtime_python.observability.usage import ProviderUsage
@@ -29,7 +28,7 @@ def map_openai_responses_usage(response: object) -> ProviderUsageMapping:
     status = _text_field(response, "status")
 
     return ProviderUsageMapping(
-        usage=ProviderUsage(
+        usage=ProviderUsage.from_provider_report(
             input_tokens=_int_field(usage, "input_tokens"),
             output_tokens=_int_field(usage, "output_tokens"),
             total_tokens=_int_field(usage, "total_tokens"),
@@ -41,7 +40,6 @@ def map_openai_responses_usage(response: object) -> ProviderUsageMapping:
                 _field(usage, "output_tokens_details"),
                 "reasoning_tokens",
             ),
-            estimate_total=False,
         ),
         provider_finish_reason=provider_finish_reason,
         finish_reason=_normalized_finish_reason(
@@ -58,7 +56,7 @@ def map_anthropic_messages_usage(message: object) -> ProviderUsageMapping:
     provider_finish_reason = _text_field(message, "stop_reason")
 
     return ProviderUsageMapping(
-        usage=ProviderUsage(
+        usage=ProviderUsage.from_provider_report(
             input_tokens=_int_field(usage, "input_tokens"),
             output_tokens=_int_field(usage, "output_tokens"),
             cached_input_tokens=_int_field(usage, "cache_read_input_tokens"),
@@ -66,7 +64,6 @@ def map_anthropic_messages_usage(message: object) -> ProviderUsageMapping:
                 usage,
                 "cache_creation_input_tokens",
             ),
-            estimate_total=False,
         ),
         provider_finish_reason=provider_finish_reason,
         finish_reason=normalize_finish_reason(provider_finish_reason),
@@ -105,7 +102,7 @@ def _openai_provider_finish_reason(response: object) -> str | None:
 def _openai_output_finish_reason(output: object) -> str | None:
     for item in _iter_sequence(output):
         item_type = _text_field(item, "type")
-        if item_type in PROVIDER_TOOL_CALL_FINISH_REASONS:
+        if normalize_finish_reason(item_type) == "tool_call":
             return item_type
         if _message_contains_refusal(item):
             return "refusal"

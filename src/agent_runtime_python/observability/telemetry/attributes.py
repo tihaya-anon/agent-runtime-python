@@ -42,7 +42,7 @@ USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE = "usage.cachedInputTokens"
 USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE = "usage.cacheCreationInputTokens"
 USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE = "usage.reasoningOutputTokens"
 MODEL_USAGE_ATTRIBUTE = "modelUsage"
-PROVIDER_TOOL_CALL_FINISH_REASONS = frozenset(
+_PROVIDER_TOOL_CALL_FINISH_REASONS = frozenset(
     {
         "tool_call",
         "tool_calls",
@@ -175,7 +175,7 @@ def normalize_finish_reason(provider_finish_reason: str | None) -> str | None:
         "truncation",
     }:
         return "length"
-    if reason in PROVIDER_TOOL_CALL_FINISH_REASONS:
+    if reason in _PROVIDER_TOOL_CALL_FINISH_REASONS:
         return "tool_call"
     if reason in {"refusal", "content_filter", "safety"}:
         return "refusal"

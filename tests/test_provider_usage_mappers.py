@@ -46,7 +46,7 @@ class ProviderUsageMapperTest(unittest.TestCase):
 
         self.assertEqual(
             mapped.usage,
-            ProviderUsage(input_tokens=15, output_tokens=8, estimate_total=False),
+            ProviderUsage.from_provider_report(input_tokens=15, output_tokens=8),
         )
         self.assertEqual(mapped.usage.total_tokens, None)
         self.assertEqual(mapped.usage.cached_input_tokens, None)
@@ -115,12 +115,11 @@ class ProviderUsageMapperTest(unittest.TestCase):
 
         self.assertEqual(
             mapped.usage,
-            ProviderUsage(
+            ProviderUsage.from_provider_report(
                 input_tokens=12,
                 output_tokens=7,
                 cache_creation_input_tokens=5,
                 cached_input_tokens=3,
-                estimate_total=False,
             ),
         )
         self.assertEqual(mapped.usage.total_tokens, None)
@@ -139,7 +138,7 @@ class ProviderUsageMapperTest(unittest.TestCase):
 
         self.assertEqual(
             mapped.usage,
-            ProviderUsage(input_tokens=12, estimate_total=False),
+            ProviderUsage.from_provider_report(input_tokens=12),
         )
         self.assertEqual(mapped.usage.output_tokens, None)
         self.assertEqual(mapped.usage.total_tokens, None)
