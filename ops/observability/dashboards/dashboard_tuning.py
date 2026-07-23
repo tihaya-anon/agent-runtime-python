@@ -29,7 +29,7 @@ def add_tempo_table_types(dashboard: dict[str, Any]) -> dict[str, Any]:
         for target in panel.get("targets", []):
             if not _is_tempo_target(target):
                 continue
-            if panel.get("type") == "table":
+            if panel.get("type") == "table" or _is_traceql_select_query(target):
                 target["tableType"] = "spans"
             if _is_traceql_metrics_query(target):
                 target["metricsQueryType"] = "range"
@@ -62,6 +62,8 @@ def _tune_panel(panel: dict[str, Any]) -> None:
         _tune_pie_chart_panel(panel, field_defaults)
     if panel_type == "bargauge":
         _tune_bar_gauge_panel(panel, field_defaults)
+    if panel_type == "barchart":
+        _tune_bar_chart_panel(panel, field_defaults)
     if panel_type == "heatmap":
         _tune_heatmap_panel(panel, field_defaults, targets)
     if panel_type == "timeseries":
@@ -144,6 +146,46 @@ def _tune_bar_gauge_panel(
     }
     field_defaults["decimals"] = 0
     field_defaults["noValue"] = "0"
+
+
+def _tune_bar_chart_panel(
+    panel: dict[str, Any], field_defaults: dict[str, Any]
+) -> None:
+    x_field = _provider_usage_x_field(panel.get("id"))
+    if x_field is None:
+        return
+
+    panel["options"] = {
+        "barRadius": 0,
+        "barWidth": 0.88,
+        "fullHighlight": True,
+        "groupWidth": 0.72,
+        "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": True,
+        },
+        "orientation": "horizontal",
+        "showValue": "always",
+        "stacking": "normal",
+        "tooltip": {"mode": "multi", "sort": "desc"},
+        "xField": x_field,
+        "xTickLabelMaxLength": 24,
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+    }
+    field_defaults["custom"] = {
+        "axisGridShow": False,
+        "axisLabel": "tokens",
+        "axisPlacement": "auto",
+        "fillOpacity": 72,
+        "gradientMode": "none",
+        "lineWidth": 1,
+    }
+    field_defaults["decimals"] = 0
+    field_defaults["noValue"] = "0"
+    field_defaults["unit"] = "short"
+    _filter_visual_usage_fields(panel)
 
 
 def _tune_heatmap_panel(
@@ -303,6 +345,67 @@ def _is_traceql_metrics_query(target: dict[str, Any]) -> bool:
         function_name in query
         for function_name in ["sum_over_time(", "quantile_over_time("]
     )
+
+
+def _is_traceql_select_query(target: dict[str, Any]) -> bool:
+    query = target.get("query")
+    return isinstance(query, str) and " | select(" in query
+
+
+def _filter_visual_usage_fields(panel: dict[str, Any]) -> None:
+    visual_fields = {
+        11: [
+            ("gen_ai.request.model", "Model"),
+            ("gen_ai.usage.input_tokens", "Input tokens"),
+            ("gen_ai.usage.output_tokens", "Output tokens"),
+        ],
+        12: [
+            ("graph.node.name", "Graph node"),
+            ("gen_ai.usage.input_tokens", "Input tokens"),
+            ("gen_ai.usage.output_tokens", "Output tokens"),
+        ],
+        13: [
+            ("gen_ai.request.model", "Model"),
+            ("gen_ai.usage.cache_read.input_tokens", "Cache read tokens"),
+            (
+                "gen_ai.usage.cache_creation.input_tokens",
+                "Cache creation tokens",
+            ),
+        ],
+    }.get(panel.get("id"))
+    if visual_fields is None:
+        return
+
+    panel["transformations"] = [
+        {
+            "id": "filterFieldsByName",
+            "options": {
+                "include": {"names": [field_name for field_name, _ in visual_fields]},
+            },
+        }
+    ]
+    panel.setdefault("fieldConfig", {}).setdefault("overrides", []).extend(
+        [
+            display_name_override(field_name, display_name)
+            for field_name, display_name in visual_fields
+            if field_name != _provider_usage_x_field(panel.get("id"))
+        ]
+    )
+
+
+def _provider_usage_x_field(panel_id: object) -> str | None:
+    return {
+        11: "gen_ai.request.model",
+        12: "graph.node.name",
+        13: "gen_ai.request.model",
+    }.get(panel_id)
+
+
+def display_name_override(field_name: str, display_name: str) -> dict[str, Any]:
+    return {
+        "matcher": {"id": "byName", "options": field_name},
+        "properties": [{"id": "displayName", "value": display_name}],
+    }
 
 
 def _uses_span_duration(targets: list[dict[str, Any]]) -> bool:

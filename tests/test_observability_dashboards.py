@@ -124,17 +124,18 @@ class ObservabilityDashboardTest(unittest.TestCase):
                 "Agent Run Latency Distribution",
                 "Trial Starts / min",
                 "Duration p95",
-                "Provider Usage by Study / Model",
-                "Provider Usage by Graph Node",
+                "Provider Tokens by Model",
+                "Provider Tokens by Graph Node",
                 "Provider Cache Tokens",
                 "Model Call Latency p95",
                 "Recent Trial Drilldown",
             },
         )
-        self.assertEqual(panel_types.count("table"), 4)
+        self.assertEqual(panel_types.count("table"), 1)
         self.assertIn("stat", panel_types)
         self.assertIn("gauge", panel_types)
         self.assertIn("piechart", panel_types)
+        self.assertIn("barchart", panel_types)
         self.assertIn("bargauge", panel_types)
         self.assertIn("heatmap", panel_types)
         self.assertIn("timeseries", panel_types)
@@ -175,8 +176,8 @@ class ObservabilityDashboardTest(unittest.TestCase):
         # Then
         self.assertLessEqual(
             {
-                "Provider Usage by Study / Model",
-                "Provider Usage by Graph Node",
+                "Provider Tokens by Model",
+                "Provider Tokens by Graph Node",
                 "Provider Cache Tokens",
                 "Model Call Latency p95",
                 "Recent Trial Drilldown",
@@ -216,6 +217,27 @@ class ObservabilityDashboardTest(unittest.TestCase):
                 and 'span_name="gen_ai.inference.client"' in expr
                 for expr in target_exprs
             )
+        )
+        for title in [
+            "Provider Tokens by Model",
+            "Provider Tokens by Graph Node",
+            "Provider Cache Tokens",
+        ]:
+            panel = _panel_by_title(dashboard, title)
+            self.assertEqual(panel["type"], "barchart")
+            self.assertEqual(panel["options"]["orientation"], "horizontal")
+            self.assertEqual(panel["options"]["showValue"], "always")
+            self.assertEqual(panel["options"]["stacking"], "normal")
+            transformations = json.dumps(panel["transformations"])
+            self.assertIn("filterFieldsByName", transformations)
+            self.assertNotIn("gen_ai.usage.total_tokens", transformations)
+        self.assertEqual(
+            _panel_by_title(dashboard, "Model Call Latency p95")["type"],
+            "stat",
+        )
+        self.assertEqual(
+            _panel_by_title(dashboard, "Recent Trial Drilldown")["type"],
+            "table",
         )
         out_of_scope_surface = " ".join(
             [

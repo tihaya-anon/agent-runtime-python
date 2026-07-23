@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from grafana_foundation_sdk.builders.barchart import Panel as BarChartPanel
 from grafana_foundation_sdk.builders.bargauge import Panel as BarGaugePanel
 from grafana_foundation_sdk.builders.dashboard import Dashboard, TextBoxVariable
 from grafana_foundation_sdk.builders.gauge import Panel as GaugePanel
@@ -155,26 +156,26 @@ def drilldown_table_panel() -> TablePanel:
     )
 
 
-def usage_by_study_model_panel() -> TablePanel:
-    return table_panel(
+def usage_by_study_model_panel() -> BarChartPanel:
+    return bar_chart_tempo_panel(
         11,
-        "Provider Usage by Study / Model",
+        "Provider Tokens by Model",
         GridPos(h=8, w=12, x=0, y=20),
         tempo_query("A", provider_usage_by_study_model_traceql(), 100),
     )
 
 
-def usage_by_graph_node_panel() -> TablePanel:
-    return table_panel(
+def usage_by_graph_node_panel() -> BarChartPanel:
+    return bar_chart_tempo_panel(
         12,
-        "Provider Usage by Graph Node",
+        "Provider Tokens by Graph Node",
         GridPos(h=8, w=12, x=12, y=20),
         tempo_query("A", provider_usage_by_graph_node_traceql(), 100),
     )
 
 
-def provider_cache_tokens_panel() -> TablePanel:
-    return table_panel(
+def provider_cache_tokens_panel() -> BarChartPanel:
+    return bar_chart_tempo_panel(
         13,
         "Provider Cache Tokens",
         GridPos(h=8, w=12, x=0, y=28),
@@ -242,13 +243,13 @@ def bar_gauge_panel(
     )
 
 
-def bar_gauge_tempo_panel(
+def bar_chart_tempo_panel(
     panel_id: int,
     title: str,
     grid_pos: GridPos,
     query: TempoQuery,
-) -> BarGaugePanel:
-    return _panel(BarGaugePanel(), panel_id, title, grid_pos, TEMPO).with_target(query)
+) -> BarChartPanel:
+    return _panel(BarChartPanel(), panel_id, title, grid_pos, TEMPO).with_target(query)
 
 
 def heatmap_panel(
