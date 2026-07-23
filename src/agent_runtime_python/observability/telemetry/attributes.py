@@ -42,6 +42,22 @@ USAGE_CACHED_INPUT_TOKENS_ATTRIBUTE = "usage.cachedInputTokens"
 USAGE_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE = "usage.cacheCreationInputTokens"
 USAGE_REASONING_OUTPUT_TOKENS_ATTRIBUTE = "usage.reasoningOutputTokens"
 MODEL_USAGE_ATTRIBUTE = "modelUsage"
+PROVIDER_TOOL_CALL_FINISH_REASONS = frozenset(
+    {
+        "tool_call",
+        "tool_calls",
+        "tool_use",
+        "code_interpreter_call",
+        "computer_call",
+        "custom_tool_call",
+        "file_search_call",
+        "function_call",
+        "image_generation_call",
+        "local_shell_call",
+        "mcp_call",
+        "web_search_call",
+    }
+)
 USAGE_SNAPSHOT_ATTRIBUTES_BY_FIELD = {
     "inputTokens": USAGE_INPUT_TOKENS_ATTRIBUTE,
     "outputTokens": USAGE_OUTPUT_TOKENS_ATTRIBUTE,
@@ -147,17 +163,25 @@ def normalize_finish_reason(provider_finish_reason: str | None) -> str | None:
         return None
 
     reason = provider_finish_reason.strip().lower()
-    if reason in {"stop", "stop_sequence", "end_turn"}:
+    if reason in {"stop", "stop_sequence", "end_turn", "completed"}:
         return "stop"
-    if reason in {"length", "max_tokens", "max_output_tokens"}:
+    if reason in {
+        "length",
+        "max_tokens",
+        "max_output_tokens",
+        "model_context_window_exceeded",
+        "context_length_exceeded",
+        "truncated",
+        "truncation",
+    }:
         return "length"
-    if reason in {"tool_call", "tool_calls", "tool_use"}:
+    if reason in PROVIDER_TOOL_CALL_FINISH_REASONS:
         return "tool_call"
     if reason in {"refusal", "content_filter", "safety"}:
         return "refusal"
-    if reason in {"pause", "pause_turn"}:
+    if reason in {"pause", "pause_turn", "paused", "queued", "in_progress"}:
         return "pause"
-    if reason in {"error", "exception"}:
+    if reason in {"error", "exception", "failed", "server_error"}:
         return "error"
 
     return "unknown"

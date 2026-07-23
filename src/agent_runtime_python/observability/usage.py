@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass, field
 from typing import Any
 
 from agent_runtime_python.runtime.protocol import PROTOCOL_VERSION
@@ -16,14 +16,18 @@ class ProviderUsage:
     cached_input_tokens: int | None = None
     cache_creation_input_tokens: int | None = None
     reasoning_output_tokens: int | None = None
+    estimate_total: InitVar[bool] = True
+    _estimate_total: bool = field(init=False, repr=False, compare=False)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, estimate_total: bool) -> None:
+        object.__setattr__(self, "_estimate_total", estimate_total)
         for value in _usage_values(self):
             if value is not None and value < 0:
                 raise ValueError("Provider Usage token counts must not be negative")
 
         if (
-            self.total_tokens is None
+            estimate_total
+            and self.total_tokens is None
             and self.input_tokens is not None
             and self.output_tokens is not None
         ):
@@ -57,6 +61,7 @@ class ProviderUsage:
                 self.reasoning_output_tokens,
                 other.reasoning_output_tokens,
             ),
+            estimate_total=self._estimate_total and other._estimate_total,
         )
 
     def to_record(self) -> dict[str, int]:
