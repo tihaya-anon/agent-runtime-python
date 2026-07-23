@@ -14,6 +14,8 @@ from agent_runtime_python.observability.usage import ProviderUsage
 
 @dataclass(frozen=True)
 class ProviderUsageMapping:
+    provider: str
+    model: str | None
     usage: ProviderUsage
     provider_finish_reason: str | None = None
     finish_reason: str | None = None
@@ -28,6 +30,8 @@ def map_openai_responses_usage(response: object) -> ProviderUsageMapping:
     status = _text_field(response, "status")
 
     return ProviderUsageMapping(
+        provider="openai",
+        model=_text_field(response, "model"),
         usage=ProviderUsage.from_provider_report(
             input_tokens=_int_field(usage, "input_tokens"),
             output_tokens=_int_field(usage, "output_tokens"),
@@ -56,6 +60,8 @@ def map_anthropic_messages_usage(message: object) -> ProviderUsageMapping:
     provider_finish_reason = _text_field(message, "stop_reason")
 
     return ProviderUsageMapping(
+        provider="anthropic",
+        model=_text_field(message, "model"),
         usage=ProviderUsage.from_provider_report(
             input_tokens=_int_field(usage, "input_tokens"),
             output_tokens=_int_field(usage, "output_tokens"),

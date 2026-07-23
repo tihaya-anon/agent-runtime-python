@@ -12,6 +12,7 @@ class ProviderUsageMapperTest(unittest.TestCase):
     def test_openai_responses_maps_usage_and_completed_finish_reason(self) -> None:
         mapped = map_openai_responses_usage(
             {
+                "model": "gpt-5-test",
                 "status": "completed",
                 "usage": {
                     "input_tokens": 15,
@@ -23,6 +24,8 @@ class ProviderUsageMapperTest(unittest.TestCase):
             }
         )
 
+        self.assertEqual(mapped.provider, "openai")
+        self.assertEqual(mapped.model, "gpt-5-test")
         self.assertEqual(
             mapped.usage,
             ProviderUsage(
@@ -103,6 +106,7 @@ class ProviderUsageMapperTest(unittest.TestCase):
     def test_anthropic_messages_maps_usage_and_stop_reason(self) -> None:
         mapped = map_anthropic_messages_usage(
             SimpleNamespace(
+                model="claude-test",
                 stop_reason="end_turn",
                 usage=SimpleNamespace(
                     input_tokens=12,
@@ -113,6 +117,8 @@ class ProviderUsageMapperTest(unittest.TestCase):
             )
         )
 
+        self.assertEqual(mapped.provider, "anthropic")
+        self.assertEqual(mapped.model, "claude-test")
         self.assertEqual(
             mapped.usage,
             ProviderUsage.from_provider_report(
