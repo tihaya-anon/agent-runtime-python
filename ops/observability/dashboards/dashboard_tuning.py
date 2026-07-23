@@ -85,7 +85,7 @@ def _tune_stat_panel(panel: dict[str, Any], field_defaults: dict[str, Any]) -> N
     }
     field_defaults["decimals"] = 2
     field_defaults["noValue"] = "0"
-    if panel.get("id") == 3:
+    if panel.get("id") in {3, 14}:
         field_defaults["unit"] = "s"
 
 

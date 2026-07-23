@@ -11,6 +11,8 @@ from agent_runtime_python.observability.telemetry import (
     EXPERIMENT_TRIAL_ID_ATTRIBUTE,
     GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE,
     GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE,
+    GEN_AI_INPUT_TOKENS_ATTRIBUTE,
+    GEN_AI_OUTPUT_TOKENS_ATTRIBUTE,
     GEN_AI_REQUEST_MODEL_ATTRIBUTE,
     GEN_AI_SYSTEM_ATTRIBUTE,
     GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
@@ -67,60 +69,60 @@ def recent_trials_traceql() -> str:
 
 
 def provider_usage_by_study_model_traceql() -> str:
-    return sum_model_usage_traceql(
-        GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
+    return model_call_usage_traceql(
         [
-            EXPERIMENT_STUDY_ID_ATTRIBUTE,
-            GEN_AI_SYSTEM_ATTRIBUTE,
-            GEN_AI_REQUEST_MODEL_ATTRIBUTE,
-        ],
+            span_attribute(EXPERIMENT_STUDY_ID_ATTRIBUTE),
+            span_attribute(EXPERIMENT_TRIAL_ID_ATTRIBUTE),
+            span_attribute(AGENT_RUN_ID_ATTRIBUTE),
+            span_attribute(GEN_AI_SYSTEM_ATTRIBUTE),
+            span_attribute(GEN_AI_REQUEST_MODEL_ATTRIBUTE),
+            span_attribute(GEN_AI_TOTAL_TOKENS_ATTRIBUTE),
+            span_attribute(GEN_AI_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(GEN_AI_OUTPUT_TOKENS_ATTRIBUTE),
+        ]
     )
 
 
 def provider_usage_by_graph_node_traceql() -> str:
-    return sum_model_usage_traceql(
-        GEN_AI_TOTAL_TOKENS_ATTRIBUTE,
+    return model_call_usage_traceql(
         [
-            GRAPH_ID_ATTRIBUTE,
-            GRAPH_NODE_NAME_ATTRIBUTE,
-            GEN_AI_REQUEST_MODEL_ATTRIBUTE,
+            span_attribute(GRAPH_ID_ATTRIBUTE),
+            span_attribute(GRAPH_NODE_NAME_ATTRIBUTE),
+            span_attribute(GEN_AI_REQUEST_MODEL_ATTRIBUTE),
+            span_attribute(GEN_AI_TOTAL_TOKENS_ATTRIBUTE),
+            span_attribute(GEN_AI_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(GEN_AI_OUTPUT_TOKENS_ATTRIBUTE),
+        ]
+    )
+
+
+def provider_cache_tokens_traceql() -> str:
+    return model_call_usage_traceql(
+        [
+            span_attribute(GEN_AI_SYSTEM_ATTRIBUTE),
+            span_attribute(GEN_AI_REQUEST_MODEL_ATTRIBUTE),
+            span_attribute(GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE),
+            span_attribute(GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE),
         ],
+        reported_usage_filter(GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE),
     )
 
 
-def provider_cache_read_tokens_traceql() -> str:
-    return provider_cache_tokens_traceql(GEN_AI_CACHE_READ_INPUT_TOKENS_ATTRIBUTE)
-
-
-def provider_cache_creation_tokens_traceql() -> str:
-    return provider_cache_tokens_traceql(GEN_AI_CACHE_CREATION_INPUT_TOKENS_ATTRIBUTE)
-
-
-def provider_cache_tokens_traceql(attribute_name: str) -> str:
-    return sum_model_usage_traceql(
-        attribute_name,
-        [GEN_AI_SYSTEM_ATTRIBUTE, GEN_AI_REQUEST_MODEL_ATTRIBUTE],
+def model_call_latency_p95_promql() -> str:
+    return (
+        "histogram_quantile(0.95, sum by (le, span_name) "
+        f"(increase({SPANMETRICS_LATENCY_BUCKET}"
+        f'{{service="{SERVICE_NAME}",span_name="{MODEL_CALL_SPAN}"}}'
+        "[$__range])))"
     )
 
 
-def sum_model_usage_traceql(
-    usage_attribute_name: str,
-    group_attribute_names: list[str],
+def model_call_usage_traceql(
+    fields: list[str],
+    model_filter: str | None = None,
 ) -> str:
-    return (
-        f"{selected_model_calls_traceql(reported_usage_filter(usage_attribute_name))} "
-        f"| sum_over_time({span_attribute(usage_attribute_name)}) "
-        f"by ({', '.join(span_attribute(name) for name in group_attribute_names)})"
-    )
-
-
-def model_call_latency_p95_traceql() -> str:
-    return (
-        f"{selected_model_calls_traceql()} "
-        f"| quantile_over_time(span:duration, .95) "
-        f"by ({span_attribute(GEN_AI_REQUEST_MODEL_ATTRIBUTE)}, "
-        f"{span_attribute(GRAPH_NODE_NAME_ATTRIBUTE)})"
-    )
+    selected_fields = select_fields(["trace:id", "span:id", *fields])
+    return f"{selected_model_calls_traceql(model_filter)} | {selected_fields}"
 
 
 def recent_trial_usage_traceql() -> str:

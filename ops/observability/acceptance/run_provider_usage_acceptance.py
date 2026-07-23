@@ -23,7 +23,12 @@ from smoke_commands import (
     run_command,
 )
 from smoke_results import TrialIdentity, read_trial_identities
-from smoke_telemetry import tempo_has_trace, wait_for, wait_for_http
+from smoke_telemetry import (
+    prometheus_has_samples,
+    tempo_has_trace,
+    wait_for,
+    wait_for_http,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_FILE = ROOT / "compose.observability.yaml"
@@ -31,6 +36,7 @@ DEFAULT_RESULTS_PATH = Path("/tmp/agent-runtime-python-provider-usage-acceptance
 DEFAULT_RUNTIME_URL = "http://127.0.0.1:8088"
 DEFAULT_OTLP_ENDPOINT = "http://127.0.0.1:4318"
 DEFAULT_TEMPO_URL = "http://127.0.0.1:3200"
+DEFAULT_PROMETHEUS_URL = "http://127.0.0.1:9090"
 USAGE_GRAPH_ID = "graph:python-smoke-usage"
 USAGE_NODE_NAME = "draft_response"
 EXPECTED_USAGE = {
@@ -88,6 +94,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--runtime-url", default=DEFAULT_RUNTIME_URL)
     parser.add_argument("--otlp-endpoint", default=DEFAULT_OTLP_ENDPOINT)
     parser.add_argument("--tempo-url", default=DEFAULT_TEMPO_URL)
+    parser.add_argument("--prometheus-url", default=DEFAULT_PROMETHEUS_URL)
     parser.add_argument("--results-path", type=Path, default=DEFAULT_RESULTS_PATH)
     parser.add_argument(
         "--study-id",
@@ -170,6 +177,19 @@ def wait_for_provider_usage_traces(
                 f'&& span."gen_ai.usage.total_tokens" = 18 '
                 f'&& span."metadata.agent_graph.id" = "{USAGE_GRAPH_ID}" '
                 f'&& span."graph.node.name" = "{USAGE_NODE_NAME}" }}'
+            ),
+        ),
+    )
+    wait_for(
+        description="gen_ai model latency p95 metric",
+        timeout_seconds=args.telemetry_timeout,
+        probe=lambda: prometheus_has_samples(
+            args.prometheus_url,
+            (
+                "histogram_quantile(0.95, sum by (le, span_name) "
+                "(rate(traces_spanmetrics_latency_bucket"
+                '{service="agent-runtime-python",'
+                'span_name="gen_ai.inference.client"}[1h])))'
             ),
         ),
     )

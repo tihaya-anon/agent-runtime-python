@@ -27,9 +27,8 @@ from dashboard_queries import (
     agent_run_latency_distribution_promql,
     duration_p95_by_span_promql,
     failed_runs_per_min_promql,
-    model_call_latency_p95_traceql,
-    provider_cache_creation_tokens_traceql,
-    provider_cache_read_tokens_traceql,
+    model_call_latency_p95_promql,
+    provider_cache_tokens_traceql,
     provider_usage_by_graph_node_traceql,
     provider_usage_by_study_model_traceql,
     recent_trial_usage_traceql,
@@ -151,45 +150,44 @@ def drilldown_table_panel() -> TablePanel:
     return table_panel(
         10,
         "Recent Trial Drilldown",
-        GridPos(h=8, w=24, x=0, y=44),
+        GridPos(h=8, w=24, x=0, y=36),
         tempo_query("A", recent_trial_usage_traceql(), 50),
     )
 
 
-def usage_by_study_model_panel() -> BarGaugePanel:
-    return bar_gauge_tempo_panel(
+def usage_by_study_model_panel() -> TablePanel:
+    return table_panel(
         11,
         "Provider Usage by Study / Model",
-        GridPos(h=8, w=24, x=0, y=20),
+        GridPos(h=8, w=12, x=0, y=20),
         tempo_query("A", provider_usage_by_study_model_traceql(), 100),
     )
 
 
-def usage_by_graph_node_panel() -> BarGaugePanel:
-    return bar_gauge_tempo_panel(
+def usage_by_graph_node_panel() -> TablePanel:
+    return table_panel(
         12,
         "Provider Usage by Graph Node",
-        GridPos(h=8, w=8, x=0, y=36),
+        GridPos(h=8, w=12, x=12, y=20),
         tempo_query("A", provider_usage_by_graph_node_traceql(), 100),
     )
 
 
-def provider_cache_tokens_panel() -> TimeseriesPanel:
-    return timeseries_tempo_panel(
+def provider_cache_tokens_panel() -> TablePanel:
+    return table_panel(
         13,
         "Provider Cache Tokens",
-        GridPos(h=8, w=8, x=8, y=36),
-        tempo_query("A", provider_cache_read_tokens_traceql(), 100),
-        tempo_query("B", provider_cache_creation_tokens_traceql(), 100),
+        GridPos(h=8, w=12, x=0, y=28),
+        tempo_query("A", provider_cache_tokens_traceql(), 100),
     )
 
 
-def model_call_latency_panel() -> TimeseriesPanel:
-    return timeseries_tempo_panel(
+def model_call_latency_panel() -> StatPanel:
+    return stat_panel(
         14,
         "Model Call Latency p95",
-        GridPos(h=8, w=8, x=16, y=36),
-        tempo_query("A", model_call_latency_p95_traceql(), 100),
+        GridPos(h=8, w=12, x=12, y=28),
+        prometheus_query("A", model_call_latency_p95_promql(), "p95"),
     )
 
 

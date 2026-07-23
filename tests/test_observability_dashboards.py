@@ -131,7 +131,7 @@ class ObservabilityDashboardTest(unittest.TestCase):
                 "Recent Trial Drilldown",
             },
         )
-        self.assertEqual(panel_types.count("table"), 1)
+        self.assertEqual(panel_types.count("table"), 4)
         self.assertIn("stat", panel_types)
         self.assertIn("gauge", panel_types)
         self.assertIn("piechart", panel_types)
@@ -163,6 +163,11 @@ class ObservabilityDashboardTest(unittest.TestCase):
         queries = json.dumps(dashboard["panels"])
         target_queries = [
             target.get("query", "")
+            for panel in dashboard["panels"]
+            for target in panel.get("targets", [])
+        ]
+        target_exprs = [
+            target.get("expr", "")
             for panel in dashboard["panels"]
             for target in panel.get("targets", [])
         ]
@@ -199,7 +204,7 @@ class ObservabilityDashboardTest(unittest.TestCase):
             self.assertIn(attribute_name, queries)
         self.assertTrue(
             any(
-                "sum_over_time" in query
+                "select(" in query
                 and "gen_ai.usage.total_tokens" in query
                 and "gen_ai.request.model" in query
                 for query in target_queries
@@ -207,9 +212,9 @@ class ObservabilityDashboardTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "quantile_over_time(span:duration, .95)" in query
-                and "gen_ai.inference.client" in query
-                for query in target_queries
+                "histogram_quantile(0.95" in expr
+                and 'span_name="gen_ai.inference.client"' in expr
+                for expr in target_exprs
             )
         )
         out_of_scope_surface = " ".join(
