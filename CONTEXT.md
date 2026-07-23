@@ -27,3 +27,15 @@ _Avoid_: Run metadata, trial extras
 **Usage Snapshot**:
 A cumulative point-in-time report of Provider Usage for an Agent Run or Development Trial. In v1, the runtime emits one final Usage Snapshot before the terminal worker event.
 _Avoid_: Usage event, token event
+
+**Observability Profile**:
+The runtime-owned policy that decides how much telemetry and evidence linkage a run may emit. Production profiles stay low-sensitive and metadata-first; development profiles may emit richer runtime context and evidence references.
+_Avoid_: Telemetry mode, debug flag
+
+**EvidenceRef**:
+A pointer to external evidence for a Development Trial or runtime event, including enough identity to locate and validate the evidence without embedding its payload in telemetry.
+_Avoid_: Artifact record, stored payload
+
+**EvidenceSink**:
+The runtime seam that accepts evidence and returns EvidenceRefs while leaving storage, experiment tracking, and comparison surfaces to adapters or external tools.
+_Avoid_: Artifact database, experiment store

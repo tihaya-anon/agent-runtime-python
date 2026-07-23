@@ -1,0 +1,3 @@
+# Use EvidenceSink adapters for experiment evidence
+
+The runtime should not own a full experiment artifact database, comparison UI, or dataset registry. It should own agent runtime semantics, dev/prod observability policy, and `EvidenceRef` pointers emitted through an `EvidenceSink` interface, while mature experiment platforms such as MLflow, Phoenix, LangSmith, Langfuse, W&B, local files, or object storage provide concrete evidence storage and comparison surfaces through adapters. OpenTelemetry remains the runtime execution telemetry layer and should carry bounded metadata plus evidence pointers, not raw prompts, tool payloads, or provider responses.
